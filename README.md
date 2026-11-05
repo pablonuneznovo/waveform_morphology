@@ -26,3 +26,7 @@ python figure_5.py
 ```
 
 The scripts write 600 dpi PNG and SVG files to `figures/`, named `fig2` through `fig5`. Figures 3 and 4 reproduce the simulation analyses from scratch and may take substantially longer than the other figures.
+
+Figure 2 uses deterministic model trajectories. Figure 3 uses 30 noise realisations per coupling condition for both the spectral and bivariate analyses. Figure 4 uses 60 network realisations per condition; its reciprocity and irreversibility values come from the same networks. Figure 5 uses 30 noise realisations per perturbation condition.
+
+For Figure 4, the “symmetric” condition is symmetrised before per-node row normalisation. The final weights are therefore not necessarily exactly symmetric.

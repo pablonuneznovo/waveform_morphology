@@ -212,8 +212,7 @@ def wf_features(y):
             rises.append((p - prev[-1]) * dt)
             decays.append((nxt[0] - p) * dt)
     if not rises:
-        rise = decay = np.nan
-        rdsym = 0.5
+        raise ValueError('No valid rise and decay times were detected.')
     else:
         rt, dc = (np.median(rises), np.median(decays))
         rise, decay = (rt, dc)
@@ -228,7 +227,7 @@ def one_cycle(y):
     zc = np.where((yy[:-1] < 0) & (yy[1:] >= 0))[0]
     zc = zc[zc > ny // 2]
     if zc.size < 2:
-        return (np.linspace(0, 1, 200), np.zeros(200))
+        raise ValueError('Fewer than two waveform cycles were detected.')
     seg = y[zc[-2]:zc[-1]]
     p = np.linspace(0, 1, seg.size)
     ph = np.linspace(0, 1, 200)
@@ -412,41 +411,32 @@ def simulate_pair_irreversibility():
         td_b = np.linspace(0.018, 0.042, 6)
         T_b = 45
         D_b = 0.0008
-        nRepB = 6
-        td_list, Pp_list, Tk_list = ([], [], [])
-        for td in td_b:
+        nRepB = 30
+        Isym_reps = np.empty((td_b.size, nRepB))
+        Idir_reps = np.empty((td_b.size, nRepB))
+        Inull = np.empty(td_b.size)
+        rng_s = np.random.default_rng(7)
+        n_surr = 40
+        for k, td in enumerate(td_b):
+            print(f'Bivariate irreversibility: decay {td * 1000:.1f} ms', flush=True)
             PhB, fhk = scan_bif(sigma_sig, theta_E, theta_I, tau_r_E, td, tau_r_I, tau_d_I, 6)
             if np.isnan(PhB) or fhk < 2 or fhk > 7:
                 PhB, fhk = (P_hopf, f_hopf)
-            td_list.append(td)
-            Pp_list.append(PhB + 0.8)
-            Tk_list.append(max(1, int(round(1 / (4 * max(fhk, 1)) / dt_s))))
-        td_arr = np.repeat(td_list, nRepB)
-        Pp_arr = np.repeat(Pp_list, nRepB)
-        Mb = td_arr.size
-        yAs, yBs = sim_two_dir_ens(Mb, tau_r_E, td_arr, tau_r_I, tau_d_I, Pp_arr, kHalf, kHalf, T_b, D_b)
-        yAd, yBd = sim_two_dir_ens(Mb, tau_r_E, td_arr, tau_r_I, tau_d_I, Pp_arr, 0, kappa, T_b, D_b)
-        Isym = np.zeros(td_b.size)
-        Idir = np.zeros(td_b.size)
-        Inull = np.zeros(td_b.size)
-        rng_s = np.random.default_rng(7)
-        n_surr = 40
-        for k in range(td_b.size):
-            Tk = Tk_list[k]
-            Is = Id = 0.0
+            Pp = PhB + 0.8
+            Tk = max(1, int(round(1 / (4 * max(fhk, 1)) / dt_s)))
+            yAs, yBs = sim_two_dir_ens(nRepB, tau_r_E, td, tau_r_I, tau_d_I, Pp, kHalf, kHalf, T_b, D_b)
+            yAd, yBd = sim_two_dir_ens(nRepB, tau_r_E, td, tau_r_I, tau_d_I, Pp, 0, kappa, T_b, D_b)
             null_vals = []
             for m in range(nRepB):
-                idx = k * nRepB + m
-                a = yAd[idx, ::ds]
-                b = yBd[idx, ::ds]
-                Is += reversibility_deco(np.vstack([yAs[idx, ::ds], yBs[idx, ::ds]]), Tk)
-                Id += reversibility_deco(np.vstack([a, b]), Tk)
+                a = yAd[m, ::ds]
+                b = yBd[m, ::ds]
+                Isym_reps[k, m] = reversibility_deco(np.vstack([yAs[m, ::ds], yBs[m, ::ds]]), Tk)
+                Idir_reps[k, m] = reversibility_deco(np.vstack([a, b]), Tk)
                 for _ in range(n_surr):
                     null_vals.append(reversibility_deco(np.vstack([_phase_rand(a, rng_s), _phase_rand(b, rng_s)]), Tk))
-            Isym[k] = Is / nRepB
-            Idir[k] = Id / nRepB
             Inull[k] = np.percentile(null_vals, 95)
-        return dict(td_b=td_b, Isym=Isym, Idir=Idir, Inull=Inull)
+            del yAs, yBs, yAd, yBd
+        return dict(td_b=td_b, Isym=Isym_reps.mean(1), Idir=Idir_reps.mean(1), Isym_sem=Isym_reps.std(1, ddof=1) / np.sqrt(nRepB), Idir_sem=Idir_reps.std(1, ddof=1) / np.sqrt(nRepB), Inull=Inull)
     return compute()
 
 ORIG_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -543,10 +533,10 @@ def plot_figure(d, d1, d4, db):
     ax = fig.add_subplot(gs_bot[1, 1])
     if 'Inull' in d4:
         ax.plot(d4['td_b'] * 1000.0, d4['Inull'], ':', color=C_BASE, lw=1.2, label='surrogate null (95th pct)')
-    ax.plot(d4['td_b'] * 1000.0, d4['Idir'], 'o-', color=C_DIR, label='Directed A$\\rightarrow$B')
-    ax.plot(d4['td_b'] * 1000.0, d4['Isym'], 's-', color=C_SYM, label='Symmetric')
+    ax.errorbar(d4['td_b'] * 1000.0, d4['Idir'], yerr=d4['Idir_sem'], fmt='o-', capsize=2, color=C_DIR, label='Directed A$\\rightarrow$B')
+    ax.errorbar(d4['td_b'] * 1000.0, d4['Isym'], yerr=d4['Isym_sem'], fmt='s-', capsize=2, color=C_SYM, label='Symmetric')
     ax.axhline(0.0, ls=':', lw=0.5, color=C_BASE)
-    ymax = max(d4['Idir'].max(), d4['Isym'].max(), d4['Inull'].max() if 'Inull' in d4 else 0)
+    ymax = max((d4['Idir'] + d4['Idir_sem']).max(), (d4['Isym'] + d4['Isym_sem']).max(), d4['Inull'].max())
     ax.set_ylim(-0.02, ymax * 1.25)
     ax.set_xlabel('$\\tau_d$ (ms)')
     ax.set_ylabel('Bivariate irreversibility')

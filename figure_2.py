@@ -176,8 +176,7 @@ def wf_features(y):
             rises.append((p - prev[-1]) * dt)
             decays.append((nxt[0] - p) * dt)
     if not rises:
-        rise = decay = np.nan
-        rdsym = 0.5
+        raise ValueError('No valid rise and decay times were detected.')
     else:
         rt, dc = (np.median(rises), np.median(decays))
         rise, decay = (rt, dc)
@@ -192,7 +191,7 @@ def one_cycle(y):
     zc = np.where((yy[:-1] < 0) & (yy[1:] >= 0))[0]
     zc = zc[zc > ny // 2]
     if zc.size < 2:
-        return (np.linspace(0, 1, 200), np.zeros(200))
+        raise ValueError('Fewer than two waveform cycles were detected.')
     seg = y[zc[-2]:zc[-1]]
     p = np.linspace(0, 1, seg.size)
     ph = np.linspace(0, 1, 200)

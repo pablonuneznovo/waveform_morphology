@@ -451,7 +451,7 @@ def plot_figure():
     D = 0.0008
     T = 80.0
     eps_train = 0.12
-    nRepC = 8
+    nRepC = 30
     W_dir_ref = np.array([[0.0, 0.0], [kappa, 0.0]])
     _, _, yAc, _ = pair_cycle(tdE, P, W_dir_ref, fh)
     thr = float(yAc.mean())
@@ -474,6 +474,8 @@ def plot_figure():
     irr_reps = np.empty((nRepC, len(meta)))
     ico_reps = np.empty((nRepC, len(meta)))
     for r in range(nRepC):
+        if (r + 1) % 5 == 0:
+            print(f'Noisy-pair realization {r + 1}/{nRepC}', flush=True)
         rng = np.random.default_rng(1000 + r)
         YA, YB = run_pair_perturbed(W01v, W10v, phiv, tdE, P, D, T, rng, thr, period_nom, eps_train)
         nseg = min(YA.shape[1], int(round(4.0 * fs_s)))

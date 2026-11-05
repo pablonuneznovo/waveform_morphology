@@ -244,8 +244,7 @@ def wf_features(y):
             rises.append((p - prev[-1]) * dt)
             decays.append((nxt[0] - p) * dt)
     if not rises:
-        rise = decay = np.nan
-        rdsym = 0.5
+        raise ValueError('No valid rise and decay times were detected.')
     else:
         rt, dc = (np.median(rises), np.median(decays))
         rise, decay = (rt, dc)
@@ -260,7 +259,7 @@ def one_cycle(y):
     zc = np.where((yy[:-1] < 0) & (yy[1:] >= 0))[0]
     zc = zc[zc > ny // 2]
     if zc.size < 2:
-        return (np.linspace(0, 1, 200), np.zeros(200))
+        raise ValueError('Fewer than two waveform cycles were detected.')
     seg = y[zc[-2]:zc[-1]]
     p = np.linspace(0, 1, seg.size)
     ph = np.linspace(0, 1, 200)
@@ -324,17 +323,6 @@ def make_W_from(base, alpha, kappa_tot):
 def weighted_reciprocity(W):
     s = W.sum()
     return np.minimum(W, W.T).sum() / s if s > 0 else np.nan
-
-def recip_of_alpha(alpha_vec, N=8, dens=0.5, kappa_tot=0.5, nb=60):
-    out = np.zeros(alpha_vec.size)
-    for a, al in enumerate(alpha_vec):
-        rs = []
-        for _ in range(nb):
-            b = rng.random((N, N)) * (rng.random((N, N)) < dens)
-            np.fill_diagonal(b, 0.0)
-            rs.append(weighted_reciprocity(make_W_from(b, al, kappa_tot)))
-        out[a] = np.nanmean(rs)
-    return out
 
 def net_reps_I(Wlist, trE, tdE, trI, tdI, P, T, D, Tdeco):
     Wbig = block_diag(*Wlist)
@@ -517,7 +505,7 @@ def simulate_network():
         kappa_tot = 0.5
         D_net = 0.0004
         T_net = 25
-        nRep = 6
+        nRep = 60
         dens = 0.5
         P_net = P_hopf + 0.4
         T_deco = max(1, int(round(1 / (4 * max(f_hopf, 1)) / dt_s)))
@@ -530,16 +518,20 @@ def simulate_network():
         Nb_vec = np.array([8, 16, 32])
         alpha_vec = np.linspace(0, 1, 6)
         I1_byN = np.zeros((N_vec.size, nRep, alpha_vec.size))
+        R1_byN = np.zeros((N_vec.size, nRep, alpha_vec.size))
         for k, Nn in enumerate(N_vec):
+            print(f'Reciprocity sweep: N={Nn}', flush=True)
             bases = [rand_base(int(Nn)) for _ in range(nRep)]
             for a, al in enumerate(alpha_vec):
                 Wlist = [make_W_from(b, al, kappa_tot) for b in bases]
+                R1_byN[k, :, a] = [weighted_reciprocity(W) for W in Wlist]
                 I1_byN[k, :, a] = net_reps_I(Wlist, tau_r_E, tau_d_E, tau_r_I, tau_d_I, P_net, T_net, D_net, T_deco)
         tau_m = np.sqrt(tau_r_E * tau_d_E)
         rho_vec = np.array([1, 2, 4, 7, 11], float)
         Isym2_byN = np.zeros((Nb_vec.size, nRep, rho_vec.size))
         Idir2_byN = np.zeros((Nb_vec.size, nRep, rho_vec.size))
         for k, Nn in enumerate(Nb_vec):
+            print(f'Synaptic asymmetry sweep: N={Nn}', flush=True)
             bases = [rand_base(int(Nn)) for _ in range(nRep)]
             for j, rho in enumerate(rho_vec):
                 trj = tau_m / np.sqrt(rho)
@@ -556,12 +548,13 @@ def simulate_network():
         Isym3 = np.zeros((nRep, N_vec.size))
         Idir3 = np.zeros((nRep, N_vec.size))
         for j, Nn in enumerate(N_vec):
+            print(f'Network-size sweep: N={Nn}', flush=True)
             basesN = [rand_base(int(Nn)) for _ in range(nRep)]
             Wsym = [make_W_from(b, 0, kappa_tot) for b in basesN]
             Wdir = [make_W_from(b, 1, kappa_tot) for b in basesN]
             Isym3[:, j] = net_reps_I(Wsym, tau_r_E, tau_d_E, tau_r_I, tau_d_I, P_net, T_net, D_net, T_deco)
             Idir3[:, j] = net_reps_I(Wdir, tau_r_E, tau_d_E, tau_r_I, tau_d_I, P_net, T_net, D_net, T_deco)
-        return dict(N_vec=N_vec, Nb_vec=Nb_vec, alpha_vec=alpha_vec, I1_byN=I1_byN, rho_vec=rho_vec, Isym2_byN=Isym2_byN, Idir2_byN=Idir2_byN, Isym3=Isym3, Idir3=Idir3)
+        return dict(N_vec=N_vec, Nb_vec=Nb_vec, alpha_vec=alpha_vec, I1_byN=I1_byN, R1_byN=R1_byN, rho_vec=rho_vec, Isym2_byN=Isym2_byN, Idir2_byN=Idir2_byN, Isym3=Isym3, Idir3=Idir3)
     return compute()
 
 ORIG_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -611,7 +604,7 @@ def plot_figure(d):
     ax = fig.add_subplot(gs_bot[0, 0])
     N_ramp = n_shade_ramp(NPG_COLORS['teal'], d['N_vec'].size)
     for k, Nn in enumerate(d['N_vec']):
-        rvec = recip_of_alpha(d['alpha_vec'], N=int(Nn))
+        rvec = d['R1_byN'][k].mean(0)
         o = np.argsort(rvec)
         ax.plot(rvec[o], d['I1_byN'][k].mean(0)[o], 'o-', color=N_ramp[k], ms=3, lw=1.2, label=f'N={int(Nn)}')
     ax.set_xlabel('Network reciprocity $r$')
