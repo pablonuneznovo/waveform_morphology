@@ -1,12 +1,13 @@
 import os
 from math import exp
-import numpy as np
-from scipy.signal import welch, csd, find_peaks
-from scipy.linalg import block_diag
-from matplotlib.colors import LinearSegmentedColormap
+
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import LinearSegmentedColormap
+from numba import njit, prange
+from scipy.optimize import root
 
 NPG_COLORS = {'red': '#E64B35', 'teal': '#4DBBD5', 'green': '#00A087', 'navy': '#3C5488', 'salmon': '#F39B7F', 'lavender': '#8491B4', 'yellow': '#FED439', 'purple': '#7E6148', 'gray': '#8C8C8C', 'lightgray': '#E5E5E5'}
 
@@ -42,8 +43,6 @@ def save_figure(fig, path_stem, formats=('pdf', 'tiff'), dpi=300):
         fig.savefig(out, format=fmt, **kwargs)
         print(f'Saved: {out}')
 
-rng = np.random.default_rng(13)
-
 C_DIR = NPG_COLORS['red']
 
 C_SYM = NPG_COLORS['navy']
@@ -71,21 +70,6 @@ dt = 0.0001
 ds = 10
 
 dt_s = dt * ds
-
-fs = 1.0 / dt
-
-NF = 3000
-
-f_vec = np.linspace(0.1, 30, NF)
-
-w_vec = 2 * np.pi * f_vec
-
-def S_np(v):
-    return 1.0 / (1.0 + np.exp(-v / sigma_sig))
-
-def dS_np(v):
-    s = S_np(v)
-    return s * (1.0 - s) / sigma_sig
 
 def fp_newton(P, thE=theta_E, thI=theta_I, sg=sigma_sig, n_iter=80):
     RE, RI = (0.5, 0.5)
@@ -147,415 +131,177 @@ def scan_bif(sg, thE, thI, trE, tdE, trI, tdI, P_max, tf=tau_fast):
         return (Ps[cross[0]], fc[cross[0]])
     return (np.nan, np.nan)
 
-def sim_node(trE, tdE, trI, tdI, P, T, tf=tau_fast):
-    N = int(round(T / dt))
-    RE = RI = xE = yE = xI = yI = 0.5
-    out = np.empty(N)
-    for n in range(N):
-        uE = c_EE * yE - c_IE * yI - theta_E + P
-        uI = c_EI * yE - c_II * yI - theta_I
-        SE = 1.0 / (1.0 + exp(-uE / sigma_sig))
-        SI = 1.0 / (1.0 + exp(-uI / sigma_sig))
-        RE = min(1.0, max(0.0, RE + dt * (-RE + SE) / tf))
-        RI = min(1.0, max(0.0, RI + dt * (-RI + SI) / tf))
-        xE += dt * (-xE + RE) / trE
-        yE += dt * (-yE + xE) / tdE
-        xI += dt * (-xI + RI) / trI
-        yI += dt * (-yI + xI) / tdI
-        yE = min(1.0, max(0.0, yE))
-        out[n] = yE
-    return out
-
-def sim_two_dir_ens(M, trE, tdE, trI, tdI, P, kAB, kBA, T, D):
-    N = int(round(T / dt))
-    sq = np.sqrt(2 * D / dt)
-    z = 0.5 * np.ones(M)
-    REA, RIA, xEA, yEA, xIA, yIA = (z.copy() for _ in range(6))
-    REB, RIB, xEB, yEB, xIB, yIB = (z.copy() for _ in range(6))
-    yA = np.empty((M, N))
-    yB = np.empty((M, N))
-    P = np.broadcast_to(P, (M,)).astype(float)
-    tdE = np.broadcast_to(tdE, (M,)).astype(float)
-    kAB = np.broadcast_to(kAB, (M,)).astype(float)
-    kBA = np.broadcast_to(kBA, (M,)).astype(float)
-    for n in range(N):
-        uEA = c_EE * yEA - c_IE * yIA - theta_E + P
-        uIA = c_EI * yEA - c_II * yIA - theta_I
-        uEB = c_EE * yEB - c_IE * yIB - theta_E + P
-        uIB = c_EI * yEB - c_II * yIB - theta_I
-        cA = kAB / tau_fast * dS_np(uEA) * yEB
-        cB = kBA / tau_fast * dS_np(uEB) * yEA
-        nz = sq * rng.standard_normal((4, M))
-        REA = np.clip(REA + dt * ((-REA + S_np(uEA)) / tau_fast + cA + nz[0]), 0, 1)
-        RIA = np.clip(RIA + dt * ((-RIA + S_np(uIA)) / tau_fast + nz[1]), 0, 1)
-        xEA = xEA + dt * (-xEA + REA) / trE
-        yEA = yEA + dt * (-yEA + xEA) / tdE
-        xIA = xIA + dt * (-xIA + RIA) / trI
-        yIA = yIA + dt * (-yIA + xIA) / tdI
-        REB = np.clip(REB + dt * ((-REB + S_np(uEB)) / tau_fast + cB + nz[2]), 0, 1)
-        RIB = np.clip(RIB + dt * ((-RIB + S_np(uIB)) / tau_fast + nz[3]), 0, 1)
-        xEB = xEB + dt * (-xEB + REB) / trE
-        yEB = yEB + dt * (-yEB + xEB) / tdE
-        xIB = xIB + dt * (-xIB + RIB) / trI
-        yIB = yIB + dt * (-yIB + xIB) / tdI
-        yA[:, n] = yEA
-        yB[:, n] = yEB
-    return (yA, yB)
-
-def sim_network(W, trE, tdE, trI, tdI, P, T, D):
-    N = W.shape[0]
-    Nt = int(round(T / dt))
-    Ns = Nt // ds
-    sq = np.sqrt(2 * D / dt)
-    RE = 0.5 * np.ones(N)
-    RI = 0.5 * np.ones(N)
-    xE = RE.copy()
-    yE = RE.copy()
-    xI = RI.copy()
-    yI = RI.copy()
-    YE = np.empty((N, Ns))
-    isamp = 0
-    for n in range(Nt):
-        uE = c_EE * yE - c_IE * yI - theta_E + P
-        uI = c_EI * yE - c_II * yI - theta_I
-        coup = dS_np(uE) * (W @ yE) / tau_fast
-        RE = np.clip(RE + dt * ((-RE + S_np(uE)) / tau_fast + coup + sq * rng.standard_normal(N)), 0, 1)
-        RI = np.clip(RI + dt * ((-RI + S_np(uI)) / tau_fast + sq * rng.standard_normal(N)), 0, 1)
-        xE = xE + dt * (-xE + RE) / trE
-        yE = yE + dt * (-yE + xE) / tdE
-        xI = xI + dt * (-xI + RI) / trI
-        yI = yI + dt * (-yI + xI) / tdI
-        if (n + 1) % ds == 0 and isamp < Ns:
-            YE[:, isamp] = yE
-            isamp += 1
-    return YE
-
-def wf_features(y):
-    y = y - y.mean()
-    amp = y.std() or np.finfo(float).eps
-    mpd = int(round(0.04 / dt))
-    pk, _ = find_peaks(y, distance=mpd, prominence=0.3 * amp)
-    tr, _ = find_peaks(-y, distance=mpd, prominence=0.3 * amp)
-    rises, decays = ([], [])
-    for p in pk:
-        prev = tr[tr < p]
-        nxt = tr[tr > p]
-        if prev.size and nxt.size:
-            rises.append((p - prev[-1]) * dt)
-            decays.append((nxt[0] - p) * dt)
-    if not rises:
-        raise ValueError('No valid rise and decay times were detected.')
-    else:
-        rt, dc = (np.median(rises), np.median(decays))
-        rise, decay = (rt, dc)
-        rdsym = rt / (rt + dc)
-    dy = np.diff(y) / dt
-    dsk = np.mean((dy - dy.mean()) ** 3) / dy.std() ** 3
-    return dict(rise=rise, decay=decay, rdsym=rdsym, dsk=dsk)
-
-def one_cycle(y):
-    ny = len(y)
-    yy = y - np.mean(y[ny // 2:])
-    zc = np.where((yy[:-1] < 0) & (yy[1:] >= 0))[0]
-    zc = zc[zc > ny // 2]
-    if zc.size < 2:
-        raise ValueError('Fewer than two waveform cycles were detected.')
-    seg = y[zc[-2]:zc[-1]]
-    p = np.linspace(0, 1, seg.size)
-    ph = np.linspace(0, 1, 200)
-    return (ph, np.interp(ph, p, seg))
-
-def twonode_spec(w, trE, tdE, trI, tdI, gE, gI, kAB, kBA):
-    n = w.size
-    coh = np.empty(n)
-    icoh = np.empty(n)
-    for k in range(n):
-        wk = w[k]
-        HE = 1 / ((1 + 1j * wk * trE) * (1 + 1j * wk * tdE))
-        HI = 1 / ((1 + 1j * wk * trI) * (1 + 1j * wk * tdI))
-        a = 1 + 1j * wk * tau_fast - gE * c_EE * HE
-        b = gE * c_IE * HI
-        c = -gI * c_EI * HE
-        d = 1 + 1j * wk * tau_fast + gI * c_II * HI
-        M = np.array([[a, b, -gE * kAB * HE, 0], [c, d, 0, 0], [-gE * kBA * HE, 0, a, b], [0, 0, c, d]], dtype=complex)
-        G = np.linalg.inv(M)
-        Sm = G @ G.conj().T
-        den = np.sqrt(Sm[0, 0].real * Sm[2, 2].real)
-        coh[k] = abs(Sm[0, 2]) / den
-        icoh[k] = Sm[0, 2].imag / den
-    return (coh, icoh)
-
-def pdc2(w, trE, tdE, gE, kAB, kBA):
-    HE = 1 / ((1 + 1j * w * trE) * (1 + 1j * w * tdE))
-    As = abs(1 + 1j * w * tau_fast - gE * c_EE * HE)
-    ABA = abs(gE * kBA * HE)
-    AAB = abs(gE * kAB * HE)
-    pdc_AB = ABA ** 2 / (As ** 2 + ABA ** 2)
-    pdc_BA = AAB ** 2 / (As ** 2 + AAB ** 2)
-    return (pdc_AB, pdc_BA)
-
-def reversibility_deco(X, T):
-    X = X - X.mean(axis=1, keepdims=True)
-    sd = X.std(axis=1, keepdims=True)
-    sd[sd < np.finfo(float).eps] = np.finfo(float).eps
-    X = X / sd
-    Xr = X[:, ::-1]
-    Dn = X.shape[0]
-    Cf = np.empty((Dn, Dn))
-    Cr = np.empty((Dn, Dn))
-    for i in range(Dn):
-        for j in range(Dn):
-            Cf[i, j] = np.mean(X[i, :-T] * X[j, T:])
-            Cr[i, j] = np.mean(Xr[i, :-T] * Xr[j, T:])
-    Cf = np.clip(Cf, -0.999999, 0.999999)
-    Cr = np.clip(Cr, -0.999999, 0.999999)
-    FSf = -0.5 * np.log(1 - Cf ** 2)
-    FSr = -0.5 * np.log(1 - Cr ** 2)
-    return np.mean((FSf - FSr) ** 2)
-
-def make_W_from(base, alpha, kappa_tot):
-    Ws = (base + base.T) / 2
-    W = (1 - alpha) * Ws + alpha * base
-    rs = W.sum(axis=1, keepdims=True)
-    rs[rs == 0] = 1
-    return kappa_tot * W / rs
-
-def weighted_reciprocity(W):
-    s = W.sum()
-    return np.minimum(W, W.T).sum() / s if s > 0 else np.nan
-
-def net_reps_I(Wlist, trE, tdE, trI, tdI, P, T, D, Tdeco):
-    Wbig = block_diag(*Wlist)
-    YE = sim_network(Wbig, trE, tdE, trI, tdI, P, T, D)
-    out = np.empty(len(Wlist))
-    off = 0
-    for i, W in enumerate(Wlist):
-        n = W.shape[0]
-        out[i] = reversibility_deco(YE[off:off + n, :], Tdeco)
-        off += n
-    return out
-
-def ensemble_spectra(yA, yB, winC, ovC):
-    Pxx = Pyy = Pxy = 0.0
-    for m in range(yA.shape[0]):
-        fw, pxx = welch(yA[m], fs=fs, window='hann', nperseg=winC, noverlap=ovC)
-        _, pyy = welch(yB[m], fs=fs, window='hann', nperseg=winC, noverlap=ovC)
-        _, pxy = csd(yA[m], yB[m], fs=fs, window='hann', nperseg=winC, noverlap=ovC)
-        Pxx = Pxx + pxx
-        Pyy = Pyy + pyy
-        Pxy = Pxy + np.conj(pxy)
-    coh = np.abs(Pxy) / np.sqrt(Pxx * Pyy)
-    icoh = np.imag(Pxy) / np.sqrt(Pxx * Pyy)
-    return (fw, coh, icoh)
+@njit(parallel=True)
+def run_networks(weights, tr_e, td_e, tr_i, td_i, drive, duration, noise, dt, ds, tau_fast, c_ee, c_ie, c_ei, c_ii, theta_e, theta_i, sigma, seed):
+    n_rep, n_nodes, _ = weights.shape
+    n_steps = int(round(duration / dt))
+    n_samples = n_steps // ds
+    output = np.empty((n_rep, n_nodes, n_samples))
+    noise_scale = np.sqrt(2 * noise / dt)
+    for rep in prange(n_rep):
+        np.random.seed(seed + rep)
+        re = np.full(n_nodes, 0.5)
+        ri = np.full(n_nodes, 0.5)
+        xe = re.copy()
+        ye = re.copy()
+        xi = ri.copy()
+        yi = ri.copy()
+        ue = np.empty(n_nodes)
+        ui = np.empty(n_nodes)
+        coupling = np.empty(n_nodes)
+        sample = 0
+        for step in range(n_steps):
+            for node in range(n_nodes):
+                ue[node] = c_ee * ye[node] - c_ie * yi[node] - theta_e + drive
+                ui[node] = c_ei * ye[node] - c_ii * yi[node] - theta_i
+            for node in range(n_nodes):
+                weighted = 0.0
+                for source in range(n_nodes):
+                    weighted += weights[rep, node, source] * ye[source]
+                se = 1.0 / (1.0 + np.exp(-ue[node] / sigma))
+                coupling[node] = se * (1.0 - se) / sigma * weighted / tau_fast
+            for node in range(n_nodes):
+                se = 1.0 / (1.0 + np.exp(-ue[node] / sigma))
+                si = 1.0 / (1.0 + np.exp(-ui[node] / sigma))
+                re_new = re[node] + dt * ((-re[node] + se) / tau_fast + coupling[node] + noise_scale * np.random.standard_normal())
+                ri_new = ri[node] + dt * ((-ri[node] + si) / tau_fast + noise_scale * np.random.standard_normal())
+                re[node] = min(1.0, max(0.0, re_new))
+                ri[node] = min(1.0, max(0.0, ri_new))
+                xe[node] += dt * (-xe[node] + re[node]) / tr_e
+                ye[node] += dt * (-ye[node] + xe[node]) / td_e
+                xi[node] += dt * (-xi[node] + ri[node]) / tr_i
+                yi[node] += dt * (-yi[node] + xi[node]) / td_i
+            if (step + 1) % ds == 0 and sample < n_samples:
+                for node in range(n_nodes):
+                    output[rep, node, sample] = ye[node]
+                sample += 1
+    return output
 
 P_hopf, f_hopf = scan_bif(sigma_sig, theta_E, theta_I, tau_r_E, tau_d_E, tau_r_I, tau_d_I, 6)
+N_REP = 60
+KAPPA = 0.5
+noise_rng = np.random.default_rng(81099)
 
-mph = 1.8
 
-def simulate_morphology():
+def exact_symmetric_weights(base):
+    sym = (base + base.T) / 2
 
-    def compute():
-        td_ex = np.array([0.015, 0.025, 0.033, 0.04])
-        td_sw = np.linspace(0.012, 0.042, 12)
-        tr_ex = 0.003
-        cyc = []
-        for td in td_ex:
-            Ph, fhj = scan_bif(sigma_sig, theta_E, theta_I, tr_ex, td, tau_r_I, tau_d_I, 6)
-            if np.isnan(Ph) or fhj < 2.5 or fhj > 7:
-                Ph = P_hopf
-            y = sim_node(tr_ex, td, tau_r_I, tau_d_I, Ph + mph, 8)
-            ph, wc = one_cycle(y)
-            cyc.append((wc - wc.min()) / (wc.max() - wc.min()))
-        rise = np.full(td_sw.size, np.nan)
-        dec = np.full(td_sw.size, np.nan)
-        rds = np.full(td_sw.size, np.nan)
-        dsk = np.full(td_sw.size, np.nan)
-        for k, td in enumerate(td_sw):
-            Ph, fhk = scan_bif(sigma_sig, theta_E, theta_I, tr_ex, td, tau_r_I, tau_d_I, 6)
-            if np.isnan(Ph) or fhk < 2.5 or fhk > 7:
-                Ph = P_hopf
-            y = sim_node(tr_ex, td, tau_r_I, tau_d_I, Ph + mph, 8)
-            F = wf_features(y[-int(5 / dt):])
-            rise[k] = F['rise'] * 1000.0
-            dec[k] = F['decay'] * 1000.0
-            rds[k] = F['rdsym']
-            dsk[k] = F['dsk']
-        ph = np.linspace(0, 1, 200)
-        return dict(td_ex=td_ex, td_sw=td_sw, ph=ph, cyc=np.array(cyc), rise=rise, dec=dec, rds=rds, dsk=dsk)
-    return compute()
+    def residual(x):
+        scale = np.exp(x)
+        return scale * (sym @ scale) - KAPPA
 
-def simulate_connectivity():
+    with np.errstate(over='ignore', invalid='ignore'):
+        fit = root(residual, np.zeros(sym.shape[0]), method='hybr')
+        if not fit.success or np.max(np.abs(residual(fit.x))) > 1e-9:
+            return None
+        scale = np.exp(fit.x)
+    weights = scale[:, None] * sym * scale[None, :]
+    if not np.allclose(weights, weights.T, atol=1e-12):
+        raise RuntimeError('Symmetry check failed')
+    if not np.allclose(weights.sum(axis=1), KAPPA, atol=1e-9):
+        raise RuntimeError('Input-strength check failed')
+    return weights
 
-    def compute():
-        kappa = 0.5
-        kHalf = kappa / 2
-        P_val = P_hopf - 0.3
-        _, _, gEv, gIv = fp_newton(P_val)
-        coh_sym, ic_sym = twonode_spec(w_vec, tau_r_E, tau_d_E, tau_r_I, tau_d_I, gEv, gIv, kHalf, kHalf)
-        coh_dir, ic_dir = twonode_spec(w_vec, tau_r_E, tau_d_E, tau_r_I, tau_d_I, gEv, gIv, 0, kappa)
-        M_ens = 30
-        T_c = 80
-        D_c = 0.0008
-        winC = int(round(4 / dt))
-        ovC = winC // 2
-        yAd, yBd = sim_two_dir_ens(M_ens, tau_r_E, tau_d_E, tau_r_I, tau_d_I, P_val, 0, kappa, T_c, D_c)
-        yAs, yBs = sim_two_dir_ens(M_ens, tau_r_E, tau_d_E, tau_r_I, tau_d_I, P_val, kHalf, kHalf, T_c, D_c)
-        fw, coh_sd, ic_sd = ensemble_spectra(yAd, yBd, winC, ovC)
-        _, coh_ss, ic_ss = ensemble_spectra(yAs, yBs, winC, ovC)
-        pdc_AB = np.empty(f_vec.size)
-        pdc_BA = np.empty(f_vec.size)
-        pdc_AB_sym = np.empty(f_vec.size)
-        pdc_BA_sym = np.empty(f_vec.size)
-        for k in range(f_vec.size):
-            pdc_AB[k], pdc_BA[k] = pdc2(w_vec[k], tau_r_E, tau_d_E, gEv, 0, kappa)
-            pdc_AB_sym[k], pdc_BA_sym[k] = pdc2(w_vec[k], tau_r_E, tau_d_E, gEv, kHalf, kHalf)
-        return dict(f_vec=f_vec, coh_sym=coh_sym, ic_sym=ic_sym, coh_dir=coh_dir, ic_dir=ic_dir, fw=fw, coh_sd=coh_sd, ic_sd=ic_sd, coh_ss=coh_ss, ic_ss=ic_ss, pdc_AB=pdc_AB, pdc_BA=pdc_BA, pdc_AB_sym=pdc_AB_sym, pdc_BA_sym=pdc_BA_sym)
-    return compute()
 
-def dskew(y):
-    y = y - y.mean()
-    dyv = np.diff(y) / dt
-    sd = dyv.std()
-    return np.mean((dyv - dyv.mean()) ** 3) / sd ** 3 if sd > 0 else np.nan
+def directed_weights(base):
+    totals = base.sum(axis=1, keepdims=True)
+    if np.any(totals == 0):
+        raise ValueError('A node has no incoming connection')
+    return KAPPA * base / totals
 
-def _phase_rand(x, rng):
-    n = x.size
-    X = np.fft.rfft(x)
-    ph = np.exp(1j * rng.uniform(0, 2 * np.pi, X.size))
-    ph[0] = 1.0
-    if n % 2 == 0:
-        ph[-1] = 1.0
-    return np.fft.irfft(X * ph, n=n)
 
-def simulate_frequency_bands():
+def weighted_reciprocity(weights):
+    return np.minimum(weights, weights.T).sum() / weights.sum()
 
-    def compute():
-        bands = [(1.0, 'theta (~4 Hz)'), (0.5, '~9 Hz'), (0.25, '~17 Hz'), (0.125, '~34 Hz')]
-        mgrid = np.linspace(0.35, 1.1, 9)
-        labels, X, Y = ([], [], [])
-        for c, lbl in bands:
-            xs, ys = ([], [])
-            for m in mgrid:
-                tf = tau_fast * c
-                trE = tau_r_E * c
-                tdE = tau_d_E * c * m
-                trI = tau_r_I * c
-                tdI = tau_d_I * c
-                Ph, fh = scan_bif(sigma_sig, theta_E, theta_I, trE, tdE, trI, tdI, 6, tf)
-                if np.isnan(Ph) or not 0.5 < fh * c / max(f_hopf, 1e-09) < 1.9:
-                    continue
-                T = min(12.0, max(4.0, 45.0 / fh))
-                y = sim_node(trE, tdE, trI, tdI, Ph + mph, T, tf)
-                xs.append(2 * np.pi * fh * tdE)
-                ys.append(dskew(y[int(min(1.5, T * 0.2) / dt):]))
-            labels.append(lbl)
-            X.append(np.array(xs))
-            Y.append(np.array(ys))
-        return dict(labels=np.array(labels, dtype=object), X=np.array(X, dtype=object), Y=np.array(Y, dtype=object))
-    return compute()
 
-def simulate_pair_irreversibility():
+def network_pairs(size, base_rng):
+    symmetric = []
+    directed = []
+    attempts = 0
+    while len(symmetric) < N_REP:
+        attempts += 1
+        if attempts > 20 * N_REP:
+            raise RuntimeError(f'Could not construct {N_REP} balanced networks for N={size}')
+        base = base_rng.random((size, size)) * (base_rng.random((size, size)) < 0.5)
+        np.fill_diagonal(base, 0)
+        if np.any(base.sum(axis=1) == 0):
+            continue
+        exact = exact_symmetric_weights(base)
+        if exact is None:
+            continue
+        symmetric.append(exact)
+        directed.append(directed_weights(base))
+    print(f'N={size}: {N_REP} networks from {attempts} draws', flush=True)
+    return symmetric, directed
 
-    def compute():
-        kappa = 0.5
-        kHalf = kappa / 2
-        td_b = np.linspace(0.018, 0.042, 6)
-        T_b = 45
-        D_b = 0.0008
-        nRepB = 6
-        td_list, Pp_list, Tk_list = ([], [], [])
-        for td in td_b:
-            PhB, fhk = scan_bif(sigma_sig, theta_E, theta_I, tau_r_E, td, tau_r_I, tau_d_I, 6)
-            if np.isnan(PhB) or fhk < 2 or fhk > 7:
-                PhB, fhk = (P_hopf, f_hopf)
-            td_list.append(td)
-            Pp_list.append(PhB + 0.8)
-            Tk_list.append(max(1, int(round(1 / (4 * max(fhk, 1)) / dt_s))))
-        td_arr = np.repeat(td_list, nRepB)
-        Pp_arr = np.repeat(Pp_list, nRepB)
-        Mb = td_arr.size
-        yAs, yBs = sim_two_dir_ens(Mb, tau_r_E, td_arr, tau_r_I, tau_d_I, Pp_arr, kHalf, kHalf, T_b, D_b)
-        yAd, yBd = sim_two_dir_ens(Mb, tau_r_E, td_arr, tau_r_I, tau_d_I, Pp_arr, 0, kappa, T_b, D_b)
-        Isym = np.zeros(td_b.size)
-        Idir = np.zeros(td_b.size)
-        Inull = np.zeros(td_b.size)
-        rng_s = np.random.default_rng(7)
-        n_surr = 40
-        for k in range(td_b.size):
-            Tk = Tk_list[k]
-            Is = Id = 0.0
-            null_vals = []
-            for m in range(nRepB):
-                idx = k * nRepB + m
-                a = yAd[idx, ::ds]
-                b = yBd[idx, ::ds]
-                Is += reversibility_deco(np.vstack([yAs[idx, ::ds], yBs[idx, ::ds]]), Tk)
-                Id += reversibility_deco(np.vstack([a, b]), Tk)
-                for _ in range(n_surr):
-                    null_vals.append(reversibility_deco(np.vstack([_phase_rand(a, rng_s), _phase_rand(b, rng_s)]), Tk))
-            Isym[k] = Is / nRepB
-            Idir[k] = Id / nRepB
-            Inull[k] = np.percentile(null_vals, 95)
-        return dict(td_b=td_b, Isym=Isym, Idir=Idir, Inull=Inull)
-    return compute()
+
+def reversibility_deco(signals, lag):
+    signals = signals - signals.mean(axis=1, keepdims=True)
+    sd = signals.std(axis=1, keepdims=True)
+    sd[sd < np.finfo(float).eps] = np.finfo(float).eps
+    signals = signals / sd
+    forward = signals[:, :-lag] @ signals[:, lag:].T / (signals.shape[1] - lag)
+    forward = np.clip(forward, -0.999999, 0.999999)
+    transformed = -0.5 * np.log(1 - forward ** 2)
+    return np.mean((transformed - transformed.T) ** 2)
+
+
+def simulate(weights, drive, lag, tr_e=tau_r_E, td_e=tau_d_E):
+    values = []
+    for start in range(0, len(weights), 15):
+        chunk = np.stack(weights[start:start + 15])
+        signals = run_networks(chunk, tr_e, td_e, tau_r_I, tau_d_I, drive, 25, 0.0004, dt, ds, tau_fast, c_EE, c_IE, c_EI, c_II, theta_E, theta_I, sigma_sig, int(noise_rng.integers(1, 1_000_000_000)))
+        values.extend(reversibility_deco(signal, lag) for signal in signals)
+    return np.asarray(values)
+
 
 def simulate_network():
+    n_vec = np.array([8, 16, 24, 32, 48])
+    nb_vec = np.array([8, 16, 32])
+    alpha_vec = np.linspace(0, 1, 6)
+    rho_vec = np.array([1, 2, 4, 7, 11], float)
+    drive = P_hopf + 0.4
+    lag = max(1, int(round(1 / (4 * max(f_hopf, 1)) / dt_s)))
 
-    def compute():
-        kappa_tot = 0.5
-        D_net = 0.0004
-        T_net = 25
-        nRep = 60
-        dens = 0.5
-        P_net = P_hopf + 0.4
-        T_deco = max(1, int(round(1 / (4 * max(f_hopf, 1)) / dt_s)))
+    i1 = np.empty((len(n_vec), N_REP, len(alpha_vec)))
+    r1 = np.empty_like(i1)
+    base_rng = np.random.default_rng(20261105)
+    for k, size in enumerate(n_vec):
+        symmetric, directed = network_pairs(int(size), base_rng)
+        for j, alpha in enumerate(alpha_vec):
+            weights = [(1 - alpha) * x + alpha * y for x, y in zip(symmetric, directed)]
+            r1[k, :, j] = [weighted_reciprocity(weight) for weight in weights]
+            i1[k, :, j] = simulate(weights, drive, lag)
+            print(f'Reciprocity: N={size}, alpha={alpha:.1f}', flush=True)
 
-        def rand_base(N):
-            b = rng.random((N, N)) * (rng.random((N, N)) < dens)
-            np.fill_diagonal(b, 0.0)
-            return b
-        N_vec = np.array([8, 16, 24, 32, 48])
-        Nb_vec = np.array([8, 16, 32])
-        alpha_vec = np.linspace(0, 1, 6)
-        I1_byN = np.zeros((N_vec.size, nRep, alpha_vec.size))
-        R1_byN = np.zeros((N_vec.size, nRep, alpha_vec.size))
-        for k, Nn in enumerate(N_vec):
-            print(f'Reciprocity sweep: N={Nn}', flush=True)
-            bases = [rand_base(int(Nn)) for _ in range(nRep)]
-            for a, al in enumerate(alpha_vec):
-                Wlist = [make_W_from(b, al, kappa_tot) for b in bases]
-                R1_byN[k, :, a] = [weighted_reciprocity(W) for W in Wlist]
-                I1_byN[k, :, a] = net_reps_I(Wlist, tau_r_E, tau_d_E, tau_r_I, tau_d_I, P_net, T_net, D_net, T_deco)
-        tau_m = np.sqrt(tau_r_E * tau_d_E)
-        rho_vec = np.array([1, 2, 4, 7, 11], float)
-        Isym2_byN = np.zeros((Nb_vec.size, nRep, rho_vec.size))
-        Idir2_byN = np.zeros((Nb_vec.size, nRep, rho_vec.size))
-        for k, Nn in enumerate(Nb_vec):
-            print(f'Synaptic asymmetry sweep: N={Nn}', flush=True)
-            bases = [rand_base(int(Nn)) for _ in range(nRep)]
-            for j, rho in enumerate(rho_vec):
-                trj = tau_m / np.sqrt(rho)
-                tdj = tau_m * np.sqrt(rho)
-                Phj, fhj = scan_bif(sigma_sig, theta_E, theta_I, trj, tdj, tau_r_I, tau_d_I, 6)
-                if np.isnan(Phj):
-                    Phj, fhj = (P_hopf, f_hopf)
-                Tk = max(1, int(round(1 / (4 * max(fhj, 1)) / dt_s)))
-                Pj = Phj + 0.4
-                Wsym = [make_W_from(b, 0, kappa_tot) for b in bases]
-                Wdir = [make_W_from(b, 1, kappa_tot) for b in bases]
-                Isym2_byN[k, :, j] = net_reps_I(Wsym, trj, tdj, tau_r_I, tau_d_I, Pj, T_net, D_net, Tk)
-                Idir2_byN[k, :, j] = net_reps_I(Wdir, trj, tdj, tau_r_I, tau_d_I, Pj, T_net, D_net, Tk)
-        Isym3 = np.zeros((nRep, N_vec.size))
-        Idir3 = np.zeros((nRep, N_vec.size))
-        for j, Nn in enumerate(N_vec):
-            print(f'Network-size sweep: N={Nn}', flush=True)
-            basesN = [rand_base(int(Nn)) for _ in range(nRep)]
-            Wsym = [make_W_from(b, 0, kappa_tot) for b in basesN]
-            Wdir = [make_W_from(b, 1, kappa_tot) for b in basesN]
-            Isym3[:, j] = net_reps_I(Wsym, tau_r_E, tau_d_E, tau_r_I, tau_d_I, P_net, T_net, D_net, T_deco)
-            Idir3[:, j] = net_reps_I(Wdir, tau_r_E, tau_d_E, tau_r_I, tau_d_I, P_net, T_net, D_net, T_deco)
-        return dict(N_vec=N_vec, Nb_vec=Nb_vec, alpha_vec=alpha_vec, I1_byN=I1_byN, R1_byN=R1_byN, rho_vec=rho_vec, Isym2_byN=Isym2_byN, Idir2_byN=Idir2_byN, Isym3=Isym3, Idir3=Idir3)
-    return compute()
+    tau_m = np.sqrt(tau_r_E * tau_d_E)
+    isym2 = np.empty((len(nb_vec), N_REP, len(rho_vec)))
+    idir2 = np.empty_like(isym2)
+    base_rng = np.random.default_rng(20262105)
+    for k, size in enumerate(nb_vec):
+        symmetric, directed = network_pairs(int(size), base_rng)
+        for j, rho in enumerate(rho_vec):
+            tr_e = tau_m / np.sqrt(rho)
+            td_e = tau_m * np.sqrt(rho)
+            hopf, frequency = scan_bif(sigma_sig, theta_E, theta_I, tr_e, td_e, tau_r_I, tau_d_I, 6)
+            if not np.isfinite(hopf) or not np.isfinite(frequency):
+                raise RuntimeError(f'Could not locate bifurcation for rho={rho}')
+            condition_lag = max(1, int(round(1 / (4 * max(frequency, 1)) / dt_s)))
+            condition_drive = hopf + 0.4
+            isym2[k, :, j] = simulate(symmetric, condition_drive, condition_lag, tr_e, td_e)
+            idir2[k, :, j] = simulate(directed, condition_drive, condition_lag, tr_e, td_e)
+            print(f'Synaptic asymmetry: N={size}, rho={rho:g}', flush=True)
+
+    isym3 = np.empty((N_REP, len(n_vec)))
+    idir3 = np.empty_like(isym3)
+    base_rng = np.random.default_rng(20263105)
+    for j, size in enumerate(n_vec):
+        symmetric, directed = network_pairs(int(size), base_rng)
+        isym3[:, j] = simulate(symmetric, drive, lag)
+        idir3[:, j] = simulate(directed, drive, lag)
+        print(f'Network size: N={size}', flush=True)
+
+    return dict(N_vec=n_vec, Nb_vec=nb_vec, alpha_vec=alpha_vec, I1_byN=i1, R1_byN=r1, rho_vec=rho_vec, Isym2_byN=isym2, Idir2_byN=idir2, Isym3=isym3, Idir3=idir3)
 
 ORIG_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -649,9 +395,4 @@ def plot_figure(d):
 set_style()
 
 if __name__ == '__main__':
-    simulate_morphology()
-    simulate_connectivity()
-    simulate_pair_irreversibility()
-    simulate_frequency_bands()
-    network = simulate_network()
-    plot_figure(network)
+    plot_figure(simulate_network())
