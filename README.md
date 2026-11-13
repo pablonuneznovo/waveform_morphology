@@ -1,13 +1,13 @@
 # Reproducing the paper figures
 
-This folder contains the code and graphical abstracts for Figures 1–4 of the paper.
+This folder contains the code and graphical abstracts for Figures 1-4 of the paper.
 
 ## Contents
 
-- `figure_1.py` — Figure 1: waveform morphology.
-- `figure_2.py` — Figure 2: interregional measures and irreversibility.
-- `figure_3.py` — Figure 3: network irreversibility.
-- `figure_4.py` — Figure 4: phase-dependent perturbation responses.
+- `figure_1.py` - Figure 1: waveform morphology.
+- `figure_2.py` - Figure 2: interregional measures and irreversibility.
+- `figure_3.py` - Figure 3: network irreversibility.
+- `figure_4.py` - Figure 4: phase-dependent perturbation responses.
 - `abstracts/Figure 1.png` through `abstracts/Figure 4.png` — graphical abstracts used in the figures.
 - `requirements.txt` — Python dependencies.
 
