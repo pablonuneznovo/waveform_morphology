@@ -23,6 +23,9 @@ python figure_1.py
 python figure_2.py
 python figure_3.py
 python figure_4.py
+python supplementary_figure_1.py
+python supplementary_figure_2.py
+python supplementary_figure_3.py
 ```
 
 The scripts write 600 dpi PNG and SVG files to `figures/`, named `fig1` through `fig4`.
@@ -81,11 +84,6 @@ python ecog/analysis/ecog_primary_analysis.py
 python figure_5.py
 python figure_6.py
 python figure_7.py
-```
-
-To build the supplementary figures:
-
-```bash
 python seeg/analysis/figures/figure_S4.py
 python seeg/analysis/figures/figure_S5.py
 python seeg/analysis/figures/figure_S6.py
