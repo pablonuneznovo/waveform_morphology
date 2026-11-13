@@ -8,8 +8,8 @@ The main folder contains the code and graphical abstracts for Figures 1-4 of the
 - `figure_2.py` - Figure 2: interregional measures and irreversibility.
 - `figure_3.py` - Figure 3: network irreversibility.
 - `figure_4.py` - Figure 4: phase-dependent perturbation responses.
-- `abstracts/Figure 1.png` through `abstracts/Figure 4.png` — graphical abstracts used in the figures.
-- `requirements.txt` — Python dependencies.
+- `abstracts/Figure 1.png` through `abstracts/Figure 4.png` - graphical abstracts used in the figures.
+- `requirements.txt` - Python dependencies.
 
 Each figure script contains its own simulation and plotting code. No participant data or external model source is required.
 
