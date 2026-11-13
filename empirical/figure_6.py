@@ -17,12 +17,10 @@ CYAN = "#3FB8DE"
 RED = "#C44536"
 GREY = "#8A97A0"
 
-# The brain and array images ship with the code, so this one needs no data root.
 CODE = Path(__file__).resolve().parent
 
 BRAIN_PNG = CODE / "figures_assets" / "brain_seeg.png"
 
-# The boxes have to fit inside the axis: at full width the last one clips.
 BOX_W = 0.204
 _GAP = (0.990 - 0.008 - 4 * BOX_W) / 3
 BOX_X = [0.008 + i * (BOX_W + _GAP) for i in range(4)]
@@ -52,7 +50,7 @@ def _arrow(ax, x_from, x_to, y=0.5):
     )
 
 def draw_schematic(ax, fs: float = 1.0) -> None:
-    """Render the four-step pipeline schematic into `ax` (a full-width axis)."""
+
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
@@ -68,7 +66,6 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
     for i in range(3):
         _arrow(ax, BOX_X[i] + BOX_W + 0.004, BOX_X[i + 1] - 0.004)
 
-    # --- box 1: brain with sEEG shafts ---
     x0 = BOX_X[0]
     if BRAIN_PNG.exists():
         img = mpimg.imread(str(BRAIN_PNG))
@@ -81,7 +78,6 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
             transform=ax.transAxes, ha="center", va="center",
             fontsize=7.6 * fs, color="0.25", zorder=6)
 
-    # --- box 2: contact pair -> difference -> alpha mode ---
     x0 = BOX_X[1]
     cx = x0 + BOX_W / 2
     shaft_y = BOX_Y1 - 0.20
@@ -89,8 +85,7 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
             transform=ax.transAxes, color="0.55", lw=3.2, solid_capstyle="round",
             zorder=4)
     for dx, lab in ((-0.028, "1"), (0.028, "2")):
-        # circular bbox rather than a Circle patch: axis aspect is not 1:1, so a
-        # patch circle renders as an ellipse
+
         ax.text(cx + dx, shaft_y, lab, transform=ax.transAxes, ha="center",
                 va="center", fontsize=6.4 * fs, color="white",
                 fontweight="bold", zorder=6,
@@ -107,14 +102,12 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
     ax.text(cx, BOX_Y0 + 0.075, "IMF4  ≈ 10 Hz", transform=ax.transAxes,
             ha="center", va="center", fontsize=7.4 * fs, color="0.25", zorder=5)
 
-    # --- box 3: one cycle with control points ---
     x0 = BOX_X[2]
     cx = x0 + BOX_W / 2
     ph = np.linspace(0, 1, 300)
-    # cycle runs zero -> peak -> descending zero -> trough -> zero, matching the
-    # convention the ascent-to-descent ratio is defined on
+
     cyc = np.sin(2 * np.pi * ph)
-    cyc = np.sign(cyc) * np.abs(cyc) ** 0.78          # visibly non-sinusoidal
+    cyc = np.sign(cyc) * np.abs(cyc) ** 0.78
     kx = cx - 0.078 + 0.156 * ph
     ky = BOX_Y1 - 0.34 + 0.075 * cyc
     ax.plot(kx, ky, transform=ax.transAxes, color=CYAN, lw=2.0, zorder=5)
@@ -134,7 +127,6 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
             ha="center", va="center", fontsize=8.2 * fs, color=NAVY,
             fontweight="bold", zorder=5)
 
-    # --- box 4: single-channel vs between-channel ---
     x0 = BOX_X[3]
     cx = x0 + BOX_W / 2
     ya = BOX_Y1 - 0.22
@@ -163,16 +155,12 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
     ax.text(cx, BOX_Y0 + 0.085, "mixed-effects model", transform=ax.transAxes,
             ha="center", va="center", fontsize=7.4 * fs, color="0.25", zorder=5)
 
-
 plt.rcParams.update({
     "font.family": "Arial", "font.size": 10 * FS,
     "axes.spines.top": False, "axes.spines.right": False,
     "pdf.fonttype": 42,
 })
 
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
 OUT_DIR = ROOT / "seeg" / "analysis" / "outputs"
@@ -183,17 +171,9 @@ elec  = pd.read_csv(OUT_DIR / "bipolar_lme_results.csv")
 subj  = pd.read_csv(OUT_DIR / "bipolar_subject_level_results.csv")
 betas = pd.read_csv(OUT_DIR / "bipolar_subject_level_betas.csv")
 
-# outcome order: four between-channel measures, then univariate set apart
 OUTCOME_ORDER = ["mean_coh", "mean_abs_imcoh", "pdc_asymmetry",
                  "mean_io_adaptive", "uni_irrev"]
-# Acronyms, so the y labels do not eat into the panel
-# width; expanded in the caption. A2D / P2T follow Quinn et al. (2021), which is
-# the source cited for the waveform descriptors.
-#   Coh     coherence
-#   |ImCoh| magnitude of the imaginary part of coherency
-#   PDC     partial directed coherence asymmetry (out - in)
-#   BTI     bivariate time-irreversibility
-#   UTI     univariate time-irreversibility
+
 OUTCOME_LABELS = {
     "mean_coh"      : "Coh",
     "mean_abs_imcoh": "|ImCoh|",
@@ -215,7 +195,6 @@ FEATURE_TITLES = {
     "peak2trough_z": "Peak/trough ratio",
 }
 
-# y positions: gap between the between-channel block and univariate
 Y_POS   = {c: float(i) for i, c in enumerate(OUTCOME_ORDER[:4])}
 Y_POS[OUTCOME_ORDER[4]] = 4.7
 Y_ORDER = [Y_POS[c] for c in OUTCOME_ORDER]
@@ -235,9 +214,6 @@ def panel_letter(ax, letter: str) -> None:
                 xytext=(-46, 14), textcoords="offset points",
                 fontsize=15*FS, fontweight="bold", va="top", ha="left")
 
-# Three-row grid: the schematic across the top, then the 2x3 of results.
-# the graphical abstract is a 3.1:1 strip; the top row is sized so it spans the
-# full width of the figure without being letterboxed
 fig = plt.figure(figsize=(13.2, 11.0))
 gs = fig.add_gridspec(3, 3, height_ratios=[0.60, 1.0, 1.0],
                       hspace=0.16, wspace=0.08,
@@ -257,7 +233,7 @@ rng = np.random.default_rng(11)
 n_clipped = 0
 
 for col, feat in enumerate(FEATURES):
-    # --- top row: electrode-level ---
+
     ax = axes[0][col]
     for outcome in OUTCOME_ORDER:
         row   = elec[(elec["outcome"] == outcome) & (elec["feature"] == feat)].iloc[0]
@@ -275,7 +251,6 @@ for col, feat in enumerate(FEATURES):
                     color="black", fontweight="bold")
     ax.set_title(FEATURE_TITLES[feat], fontsize=13*FS, fontweight="bold", pad=10)
 
-    # --- bottom row: patient-level ---
     ax = axes[1][col]
     for outcome in OUTCOME_ORDER:
         srow  = subj[(subj["outcome"] == outcome) & (subj["feature"] == feat)].iloc[0]
@@ -311,17 +286,16 @@ for r in range(2):
     for c in range(3):
         ax = axes[r][c]
         ax.axvline(0, color="0.5", lw=1, ls="--", zorder=1)
-        # faint separator between the between-channel block and univariate
+
         ax.axhline(4.0, color="0.85", lw=1.0, ls="-", zorder=0)
         ax.set_xlim(-XLIM, XLIM)
         ax.set_ylim(-0.7, 5.5)
         ax.tick_params(axis="x", labelsize=11*FS)
-        # The schematic is panel a, so the grid runs b-g.
+
         panel_letter(ax, "BCDEFG"[r * 3 + c])
         if r == 0:
             plt.setp(ax.get_xticklabels(), visible=False)
-        # manual sharey does not hide inner labels the way plt.subplots does,
-        # and repeating them would undo the width saved by the acronyms
+
         if c > 0:
             plt.setp(ax.get_yticklabels(), visible=False)
 
@@ -333,8 +307,6 @@ for r in range(2):
     for lbl, outcome in zip(axes[r][0].get_yticklabels(), OUTCOME_ORDER):
         lbl.set_color(OUTCOME_COLORS[outcome])
 
-# row labels name the level only; the model details belong in the caption, not on
-# the axis (matches the ECoG companion figure so the two read identically)
 axes[0][0].set_ylabel("Electrode level", fontsize=11.5*FS, labelpad=10)
 axes[1][0].set_ylabel("Patient level", fontsize=11.5*FS, labelpad=10)
 
@@ -353,8 +325,6 @@ legend_handles = [
 fig.legend(handles=legend_handles, loc="lower center", ncol=5,
            fontsize=10*FS, frameon=False, bbox_to_anchor=(0.5, 0.008))
 
-# NOTE: no tight_layout - the gridspec margins are set explicitly above so the
-# schematic keeps its proportions.
 stem = "fig6"
 fig.savefig(FIG_DIR / f"{stem}.png", dpi=600, bbox_inches="tight")
 fig.savefig(FIG_DIR / f"{stem}.svg", bbox_inches="tight")

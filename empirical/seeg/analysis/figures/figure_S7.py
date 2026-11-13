@@ -15,7 +15,6 @@ GREY = "#8A8A8A"
 REGION_CYCLE = [NAVY, RED, TEAL, CYAN, "#F39B7F", "#8491B4",
                 "#91D1C2", "#7E6148", "#DC0000", "#B09C85"]
 
-
 def apply_style(saved_width_in):
     scale = saved_width_in / 6.27
     sizes = {name: round(points * scale, 2) for name, points in {
@@ -50,7 +49,6 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 res     = pd.read_csv(OUT_DIR / "bipolar_lme_results.csv")
 partial = pd.read_csv(OUT_DIR / "bipolar_lme_partial_resid.csv")
 
-# One acronym set across every figure in the paper (see S6_scatter.py).
 OUTCOME_LABELS = {
     "mean_coh"      : "Coh",
     "mean_abs_imcoh": "|ImCoh|",
@@ -78,7 +76,7 @@ OUTCOME_COLORS = {
 }
 
 def pfmt(p: float) -> str:
-    """p rounded to four places reads as 0.0000 when it is merely very small."""
+
     return "< 0.0001" if p < 1e-4 else "= %.4f" % p
 
 def sig_stars(p: float) -> str:
@@ -88,7 +86,6 @@ def sig_stars(p: float) -> str:
 
 NOUT = len(OUTCOME_LABELS)
 
-# --- FIGURE 5 - Partial regression scatter (3 × 3) ---
 feat_keys_b  = list(FEATURE_LABELS.keys())
 outcome_keys = list(OUTCOME_LABELS.keys())
 
@@ -127,7 +124,6 @@ for col_i, outcome_col in enumerate(outcome_keys):
 
         ax.axhline(0, color="0.75", lw=0.8, ls="--")
         ax.axvline(0, color="0.75", lw=0.8, ls="--")
-
 
         lo, hi = ax.get_ylim()
         ax.set_ylim(lo, hi + 0.42 * (hi - lo))

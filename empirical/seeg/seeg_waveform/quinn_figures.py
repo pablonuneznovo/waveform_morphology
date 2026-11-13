@@ -1,9 +1,4 @@
-"""Per-channel decomposition figures.
 
-The diagnostic panel for a single channel - signal, IMFs, instantaneous
-frequency and the cycle profile - and the population averages built from the
-saved per-channel profiles. set_publication_style() holds the shared style.
-"""
 
 from pathlib import Path
 
@@ -15,9 +10,8 @@ from .config import load_config
 from .io import load_recording
 from .pipeline import channel_diagnostics, safe_name
 
-
 def set_publication_style() -> None:
-    """Use a restrained, journal-like matplotlib style."""
+
     plt.rcParams.update(
         {
             "font.family": "Arial",
@@ -35,18 +29,15 @@ def set_publication_style() -> None:
         }
     )
 
-
 def _selected_imf(result, imf_index: int) -> np.ndarray | None:
     if result.imf is None or result.imf.shape[1] <= imf_index:
         return None
     return result.imf[:, imf_index]
 
-
 def _selected_2d(arr: np.ndarray | None, imf_index: int) -> np.ndarray | None:
     if arr is None or arr.ndim < 2 or arr.shape[1] <= imf_index:
         return None
     return arr[:, imf_index]
-
 
 def _mean_and_sem(mat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     mean = np.nanmean(mat, axis=1)
@@ -55,14 +46,12 @@ def _mean_and_sem(mat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     sem = sd / np.sqrt(np.maximum(n, 1))
     return mean, sem
 
-
 def _mean_vectors(phase_profiles: np.ndarray) -> np.ndarray:
     phase = np.linspace(0, 2 * np.pi, phase_profiles.shape[0], endpoint=False)
     weights = np.exp(1j * phase)[:, None]
     centered = phase_profiles - np.nanmean(phase_profiles, axis=0, keepdims=True)
     denom = np.nansum(np.abs(centered), axis=0) + np.finfo(float).eps
     return np.nansum(centered * weights, axis=0) / denom
-
 
 def _eligible_for_average(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     min_cycles = int(cfg["emd"].get("publication_min_cycles", 5))
@@ -74,18 +63,15 @@ def _eligible_for_average(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
             out = out[~out[col].fillna(False).astype(bool)]
     return out
 
-
 def _add_empty_message(ax, message: str = "No valid cycles selected") -> None:
     ax.text(0.5, 0.5, message, ha="center", va="center", transform=ax.transAxes, color="0.35")
     ax.set_xticks([])
     ax.set_yticks([])
 
-
 def _legend_if_any(ax) -> None:
     handles, labels = ax.get_legend_handles_labels()
     if handles:
         ax.legend(frameon=False)
-
 
 def plot_channel_quinn_diagnostic(diag: dict, out_path: str | Path, dpi: int = 300) -> Path:
     set_publication_style()
@@ -111,7 +97,6 @@ def plot_channel_quinn_diagnostic(diag: dict, out_path: str | Path, dpi: int = 3
         fontsize=10,
     )
 
-    # Raw + selected IMF.
     for col, segment, color, title in [(0, pre, "tab:blue", "Pre"), (1, post, "tab:red", "Post")]:
         ax = fig.add_subplot(gs[0, col])
         res = segment["result"]
@@ -125,7 +110,6 @@ def plot_channel_quinn_diagnostic(diag: dict, out_path: str | Path, dpi: int = 3
         ax.set_ylabel("Amplitude")
         _legend_if_any(ax)
 
-    # Phase and instantaneous frequency.
     for col, segment, color, title in [(0, pre, "tab:blue", "Pre"), (1, post, "tab:red", "Post")]:
         ax = fig.add_subplot(gs[1, col])
         res = segment["result"]
@@ -144,7 +128,6 @@ def plot_channel_quinn_diagnostic(diag: dict, out_path: str | Path, dpi: int = 3
         ax.set_ylabel("Phase (rad)")
         ax2.set_ylabel("IF (Hz)")
 
-    # Control-point metrics.
     ax = fig.add_subplot(gs[2, 0])
     any_points = False
     for table, color, label in [(pre_res.cycle_table, "tab:blue", "Pre"), (post_res.cycle_table, "tab:red", "Post")]:
@@ -174,7 +157,6 @@ def plot_channel_quinn_diagnostic(diag: dict, out_path: str | Path, dpi: int = 3
     ax.set_title("Control-point distributions")
     ax.set_ylabel("Ratio")
 
-    # Phase-aligned IF heatmaps.
     for col, res, title in [(0, pre_res, "Pre"), (1, post_res, "Post")]:
         ax = fig.add_subplot(gs[3, col])
         if res.phase_aligned_if is not None:
@@ -192,7 +174,6 @@ def plot_channel_quinn_diagnostic(diag: dict, out_path: str | Path, dpi: int = 3
         ax.set_xlabel("Phase (rad)")
         ax.set_ylabel("Cycle")
 
-    # Mean phase-aligned IF and normalized waveform.
     ax = fig.add_subplot(gs[4, 0])
     any_line = False
     for res, color, label in [(pre_res, "tab:blue", "Pre"), (post_res, "tab:red", "Post")]:
@@ -228,7 +209,6 @@ def plot_channel_quinn_diagnostic(diag: dict, out_path: str | Path, dpi: int = 3
     ax.set_ylabel("Amplitude")
     _legend_if_any(ax)
 
-    # Mean-vector distributions and QC text.
     ax = fig.add_subplot(gs[5, 0])
     any_points = False
     for res, color, label in [(pre_res, "tab:blue", "Pre"), (post_res, "tab:red", "Post")]:
@@ -268,7 +248,6 @@ def plot_channel_quinn_diagnostic(diag: dict, out_path: str | Path, dpi: int = 3
     plt.close(fig)
     return out_path
 
-
 def make_selected_quinn_figures(
     config_path: str | Path,
     master_csv: str | Path | None = None,
@@ -302,10 +281,8 @@ def make_selected_quinn_figures(
         paths.append(plot_channel_quinn_diagnostic(diag, out_dir / name, dpi=cfg["outputs"].get("figure_dpi", 300)))
     return paths
 
-
 def _channel_npz_path(out_root: Path, row: pd.Series, imf_index: int) -> Path:
     return out_root / row["file"] / f"{safe_name(row['channel'])}_IMF{imf_index + 1}_outputs.npz"
-
 
 def _collect_channel_means(df: pd.DataFrame, out_root: Path, imf_index: int, key: str) -> tuple[np.ndarray, np.ndarray]:
     pre_means = []
@@ -327,7 +304,6 @@ def _collect_channel_means(df: pd.DataFrame, out_root: Path, imf_index: int, key
         return np.empty((0, 0)), np.empty((0, 0))
     min_len = min([x.size for x in pre_means + post_means])
     return np.vstack([x[:min_len] for x in pre_means]), np.vstack([x[:min_len] for x in post_means])
-
 
 def plot_population_averages(config_path: str | Path, master_csv: str | Path | None = None) -> list[Path]:
     set_publication_style()

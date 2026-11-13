@@ -1,16 +1,5 @@
-"""
-compute_stim_delta_link.py - 25 records from 23 patients, bipolar montage
-Delta_waveform  = post - pre   (mean_if, asc2desc, peak2trough)   [features table]
-Delta_conn      = post - pre   (|ImCoh|, PDC asym, TII, coherence)
-                  post: electrode_level_summary_bipolar.csv
-                  pre : electrode_level_connectivity_pre.csv
 
-Tests, per (Delta_waveform x Delta_conn) cell:
-  - pooled Spearman rho
-  - within-subject median rho + Wilcoxon across the 25 records
-  - separately for stimulated vs non-stimulated electrodes
-Outputs: outputs/stim_delta_link_results.csv
-"""
+
 import os
 from pathlib import Path
 import numpy as np
@@ -24,7 +13,6 @@ OUT_DIR   = ROOT / "seeg" / "analysis" / "outputs"
 
 KEY = ["file", "entry_index", "subject", "stim_frequency_hz", "channel"]
 
-# --- delta waveform ---
 wf = pd.read_csv(TABLE_DIR / "channel_epoch_imf4_features.csv", low_memory=False)
 WK = KEY + ["is_stimulated_channel"]
 pre_w  = wf[wf.epoch == "pre" ][WK + ["mean_if", "asc2desc", "peak2trough"]]
@@ -34,7 +22,6 @@ for f in ["mean_if", "asc2desc", "peak2trough"]:
     dwave[f"d_{f}"] = dwave[f"{f}_post"] - dwave[f"{f}_pre"]
 dwave["is_stim"] = dwave["is_stimulated_channel"].astype(str).str.lower().eq("true")
 
-# --- delta connectivity ---
 CC = ["mean_abs_imcoh", "pdc_asymmetry", "mean_tra", "mean_coh"]
 post_c = pd.read_csv(OUT_DIR / "electrode_level_summary_bipolar.csv", low_memory=False)
 if "mean_coh" not in post_c.columns:

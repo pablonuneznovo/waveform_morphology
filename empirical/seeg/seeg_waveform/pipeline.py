@@ -1,10 +1,4 @@
-"""Driving the per-channel analysis over a whole recording.
 
-analyze_channel() takes one channel through preprocessing, the decomposition
-and the summary measures for each analysis window; analyze_file() and
-analyze_dataset() fan that out over channels, recordings and the dataset, and
-write the per-channel outputs and the diagnostics that the QC figures read.
-"""
 
 from pathlib import Path
 import re
@@ -16,15 +10,12 @@ from .io import SeegRecording, iter_mat_files, load_recording
 from .preprocess import post_window_for_frequency, preprocess_segment, window_mask
 from .quinn import SegmentResult, analyze_segment
 
-
 def safe_name(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9_. -]+", "_", str(text)).strip()
-
 
 def channel_is_stimulated(channel_name: str, stimulated: list[str]) -> bool:
     norm = re.sub(r"\s+", "", channel_name).upper()
     return any(re.sub(r"\s+", "", s).upper() == norm for s in stimulated)
-
 
 def summarize_segment(prefix: str, result: SegmentResult) -> dict:
     out = {f"{prefix}_status": result.status, f"{prefix}_n_cycles": result.n_cycles}
@@ -34,7 +25,6 @@ def summarize_segment(prefix: str, result: SegmentResult) -> dict:
             if col in table:
                 out[f"{prefix}_{col}"] = float(np.nanmean(table[col]))
     return out
-
 
 def waveform_change(pre: SegmentResult, post: SegmentResult) -> dict:
     out = {}
@@ -50,7 +40,6 @@ def waveform_change(pre: SegmentResult, post: SegmentResult) -> dict:
         out["norm_waveform_change_score"] = float(np.nanmean(np.abs(post_mean[:n] - pre_mean[:n])))
     return out
 
-
 def summarize_noise(prefix: str, report) -> dict:
     return {
         f"{prefix}_noise_flag": report.flagged,
@@ -63,7 +52,6 @@ def summarize_noise(prefix: str, report) -> dict:
         f"{prefix}_extreme_amplitude_flag": report.extreme_amplitude_flag,
         f"{prefix}_nonfinite_flag": report.nonfinite_flag,
     }
-
 
 def save_channel_outputs(out_dir: Path, channel: str, pre: SegmentResult, post: SegmentResult, cfg: dict) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -81,7 +69,6 @@ def save_channel_outputs(out_dir: Path, channel: str, pre: SegmentResult, post: 
             pre_norm_waveform=pre.normalized_waveform,
             post_norm_waveform=post.normalized_waveform,
         )
-
 
 def analyze_channel(rec: SeegRecording, channel_index: int, cfg: dict, file_out_dir: Path | None = None) -> dict:
     windows = cfg["windows"]
@@ -158,9 +145,8 @@ def analyze_channel(rec: SeegRecording, channel_index: int, cfg: dict, file_out_
         save_channel_outputs(file_out_dir, channel_name, pre, post, cfg)
     return row
 
-
 def channel_diagnostics(rec: SeegRecording, channel_name: str, cfg: dict) -> dict:
-    """Return detailed pre/post arrays for Quinn-style diagnostic plotting."""
+
     if channel_name not in rec.channel_names:
         raise ValueError(f"{channel_name!r} not found in {rec.file_stem}")
     channel_index = rec.channel_names.index(channel_name)
@@ -208,7 +194,6 @@ def channel_diagnostics(rec: SeegRecording, channel_name: str, cfg: dict) -> dic
         },
     }
 
-
 def analyze_file(path: str | Path, cfg: dict, max_channels: int | None = None) -> pd.DataFrame:
     rec = load_recording(path)
     out_root = Path(cfg["project"]["output_dir"])
@@ -244,7 +229,6 @@ def analyze_file(path: str | Path, cfg: dict, max_channels: int | None = None) -
     file_out.mkdir(parents=True, exist_ok=True)
     df.to_csv(file_out / f"{rec.file_stem}_all_channels_summary.csv", index=False)
     return df
-
 
 def analyze_dataset(cfg: dict, max_files: int | None = None, max_channels: int | None = None) -> pd.DataFrame:
     files = list(iter_mat_files(cfg["project"]["data_dir"]))

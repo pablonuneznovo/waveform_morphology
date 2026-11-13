@@ -1,10 +1,4 @@
-"""Joining the waveform measures to the anatomical labels.
 
-Reads the per-subject unipolar atlas exports, attaches a label to every
-channel, and groups the AAL3 labels into the region families used throughout
-the paper: frontal, temporal, parietal, insular, hippocampal and occipital,
-with amygdalar and unassigned contacts grouped as other.
-"""
 
 import re
 from pathlib import Path
@@ -15,14 +9,12 @@ import pandas as pd
 from .localization import normalize_channel_name
 from .spatial_analysis import ATLAS_COLUMNS, is_non_gray_label, load_brainstorm_atlas_csv
 
-
 def subject_number(value: object) -> int | None:
     match = re.search(r"Subject0*([0-9]+)", str(value), flags=re.IGNORECASE)
     if match:
         return int(match.group(1))
     match = re.search(r"sub[_-]?0*([0-9]+)", str(value), flags=re.IGNORECASE)
     return int(match.group(1)) if match else None
-
 
 def find_unipolar_atlas_files(atlas_root: Path) -> dict[int, Path]:
     files = sorted(atlas_root.rglob("*_unipolar_filtered_Coordinates_and_Atlas.csv"))
@@ -32,7 +24,6 @@ def find_unipolar_atlas_files(atlas_root: Path) -> dict[int, Path]:
         if num is not None:
             out[num] = path
     return out
-
 
 def load_all_unipolar_atlases(atlas_root: Path, primary_atlas: str = "AAL") -> pd.DataFrame:
     rows = []
@@ -45,7 +36,6 @@ def load_all_unipolar_atlases(atlas_root: Path, primary_atlas: str = "AAL") -> p
     if not rows:
         return pd.DataFrame()
     return pd.concat(rows, ignore_index=True)
-
 
 def join_waveform_to_atlas(
     waveform_csv: Path,
@@ -92,7 +82,6 @@ def join_waveform_to_atlas(
     )
     return merged, atlas
 
-
 def common_region_summary(merged: pd.DataFrame) -> pd.DataFrame:
     valid = merged.loc[merged["has_atlas_label"]].copy()
     rows = []
@@ -123,7 +112,6 @@ def common_region_summary(merged: pd.DataFrame) -> pd.DataFrame:
     out = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
     return out.sort_values(["contact_group", "n_subjects", "n_contacts"], ascending=[True, False, False])
 
-
 def select_common_regions(summary: pd.DataFrame, min_subjects: int = 2, max_regions: int = 12) -> pd.DataFrame:
     candidates = summary.loc[
         summary["analysis_gray_matter_flag"].fillna(False)
@@ -135,7 +123,6 @@ def select_common_regions(summary: pd.DataFrame, min_subjects: int = 2, max_regi
         .groupby("contact_group", group_keys=False)
         .head(max_regions)
     )
-
 
 def atlas_region_family(region: object) -> str:
     text = str(region)
@@ -157,7 +144,6 @@ def atlas_region_family(region: object) -> str:
     if is_non_gray_label(text):
         return "non_gray"
     return "other"
-
 
 def add_region_family(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()

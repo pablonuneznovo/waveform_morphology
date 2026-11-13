@@ -1,11 +1,5 @@
-"""
-ecog_run_all.py - run the primary analysis over every session: AwakeEyesClosed only.
 
-Design:
-    which is 99% power for the sEEG's univariate~asymmetry effect (beta 0.107).
 
-Outputs land in outputs/ as {channels,pairs,electrodes}_<date>_<Session>_AwakeEyesClosed.csv
-"""
 import re, sys, time, traceback
 from pathlib import Path
 
@@ -31,7 +25,7 @@ def main(jobs=13):
     done, failed = 0, []
     for i, (d, monkey, date, exp) in enumerate(folders, 1):
         tag = f"{date}{exp}_{monkey}"
-        # skip if this folder already produced electrode output
+
         if list(OUT.glob(f"electrodes_{date}*_AwakeEyesClosed.csv")):
             print(f"[{i}/{len(folders)}] {tag:<22} cached"); done += 1; continue
         print(f"[{i}/{len(folders)}] {tag:<22} ...", flush=True)

@@ -1,11 +1,4 @@
-"""Reading the exported sEEG recordings.
 
-The epochs come out of Brainstorm as MATLAB v7.3 files, so they are HDF5 and
-have to be walked rather than loaded in one call: channel names arrive as cell
-arrays of object references, and the layout differs between export versions.
-load_recording() returns a SeegRecording with the signal, the channel names,
-the sampling rate and the stimulation metadata parsed out of the filename.
-"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +7,6 @@ from typing import Iterator
 
 import h5py
 import numpy as np
-
 
 @dataclass
 class SeegRecording:
@@ -30,20 +22,17 @@ class SeegRecording:
     stim_amplitude_ma: float
     subject: str
 
-
 def iter_mat_files(data_dir: str | Path) -> Iterator[Path]:
-    """Yield .mat files directly under data_dir (flat layout, e.g. pre_stim_post_data)."""
-    yield from sorted(Path(data_dir).glob("*.mat"))
 
+    yield from sorted(Path(data_dir).glob("*.mat"))
 
 def parse_subject_from_name(path: str | Path) -> str:
     name = Path(path).stem
     match = re.search(r"(HEJ_)?Subject\d+", name)
     return match.group(0) if match else "unknown"
 
-
 def h5_string_from_any(h5: h5py.File, obj) -> str:
-    """Decode MATLAB v7.3 strings stored as refs, char codes, bytes, or arrays."""
+
     if isinstance(obj, h5py.Reference):
         if not obj:
             return ""
@@ -74,7 +63,6 @@ def h5_string_from_any(h5: h5py.File, obj) -> str:
             parts.append(str(x))
     return "".join(parts).strip()
 
-
 def strings_from_dataset(h5: h5py.File, dataset) -> list[str]:
     out = []
     arr = np.asarray(dataset[()])
@@ -84,13 +72,11 @@ def strings_from_dataset(h5: h5py.File, dataset) -> list[str]:
             out.append(s)
     return out
 
-
 def strings_from_ref_dataset(h5: h5py.File, dataset, entry_index: int) -> list[str]:
     ref = dataset[entry_index, 0]
     if not ref:
         return []
     return strings_from_dataset(h5, h5[ref])
-
 
 def extract_channel_names_from_group(h5: h5py.File, channel_file_group) -> list[str]:
     chan_group = channel_file_group["Channel"]
@@ -100,7 +86,6 @@ def extract_channel_names_from_group(h5: h5py.File, channel_file_group) -> list[
         names.append(h5_string_from_any(h5, item).strip())
     return names
 
-
 def extract_channel_names(h5: h5py.File, stim_group, entry_index: int) -> list[str]:
     chan_obj = stim_group["channel_file"]
     if isinstance(chan_obj, h5py.Group):
@@ -108,28 +93,19 @@ def extract_channel_names(h5: h5py.File, stim_group, entry_index: int) -> list[s
     chan_ref = chan_obj[entry_index, 0]
     return extract_channel_names_from_group(h5, h5[chan_ref])
 
-
 def _read_scalar_ref(h5: h5py.File, ref) -> float:
     return float(np.asarray(h5[ref][()]).squeeze())
-
 
 def _is_cell_array(obj) -> bool:
     return isinstance(obj, h5py.Dataset) and obj.dtype.kind == "O"
 
-
 def count_entries(path: str | Path) -> int:
-    """Return the number of runs/trials in a file, without loading any signal data.
 
-    Supports both the trial_file-nested format (data/F1, data/F50) and the raw
-    direct-F/Time format (pre_stim_post_data) -- see load_recording() for the
-    same format distinction.
-    """
     path = Path(path)
     with h5py.File(path, "r") as h5:
         stim = h5["stimulations"]
         sig_obj = stim["trial_file"] if "trial_file" in stim else stim["F"]
         return sig_obj.shape[0] if _is_cell_array(sig_obj) else 1
-
 
 def load_recording(path: str | Path, entry_index: int = 0) -> SeegRecording:
     path = Path(path)
@@ -138,9 +114,7 @@ def load_recording(path: str | Path, entry_index: int = 0) -> SeegRecording:
         raw_format = "trial_file" not in stim
 
         if raw_format:
-            # pre_stim_post_data: F/Time live directly on `stimulations`, either as a
-            # single (n_samples, n_channels) dataset or an (n_runs, 1) array of HDF5
-            # object references, one per run.
+
             F_obj = stim["F"]
             direct_single_entry = not _is_cell_array(F_obj)
             signal_src = F_obj if direct_single_entry else h5[F_obj[entry_index, 0]]

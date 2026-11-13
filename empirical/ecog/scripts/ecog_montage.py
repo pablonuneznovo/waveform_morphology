@@ -1,18 +1,5 @@
-"""
-ecog_montage.py - build and verify the spatial bipolar montage for the Neurotycho ECoG.
 
-The 128 electrodes follow their own numbering: only 23% of consecutive channel
-pairs are mutual nearest neighbours, and the median consecutive-channel distance is 43%
-larger than the median nearest-neighbour distance. So a bipolar montage must be built
-from the published X/Y coordinates, not from channel numbering.
 
-Montage: minimum-distance matching over the electrode graph - repeatedly take the
-closest still-unused pair, so each electrode appears in at most one bipolar channel.
-
-Outputs
-  outputs/ecog_montage_<monkey>.csv   bipolar channel table (a, b, distance, midpoint)
-  outputs/fig_ecog_montage_<monkey>.png  electrodes + pairing drawn on the brain image
-"""
 import os
 import sys
 from pathlib import Path
@@ -24,9 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 MAPS = {}
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
+
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
 for _d in sorted((ROOT / "ecog" / "raw" / "position_locations").iterdir()):
@@ -39,7 +24,7 @@ for _d in sorted((ROOT / "ecog" / "raw" / "position_locations").iterdir()):
 OUT = ROOT / "ecog" / "analysis" / "outputs"
 OUT.mkdir(parents=True, exist_ok=True)
 
-MAX_PAIR_FACTOR = 1.6      # reject a bipolar pair farther than this x median NN distance
+MAX_PAIR_FACTOR = 1.6
 
 def find_map(p):
     p = Path(p)
@@ -49,7 +34,7 @@ def find_map(p):
     return hits[0] if hits else None
 
 def greedy_matching(P, max_d):
-    """Closest-first non-overlapping pairing."""
+
     n = len(P)
     D = np.linalg.norm(P[:, None, :] - P[None, :, :], axis=2)
     iu = np.triu_indices(n, 1)
@@ -85,7 +70,7 @@ for monkey, path in MAPS.items():
     for k, (i, j, dd) in enumerate(pairs):
         rows.append({
             "monkey": monkey, "bip": k + 1,
-            "ch_a": i + 1, "ch_b": j + 1,          # .mat files are 1-indexed
+            "ch_a": i + 1, "ch_b": j + 1,
             "dist_px": dd, "dist_rel": dd / med,
             "x": (X[i] + X[j]) / 2, "y": (Y[i] + Y[j]) / 2,
         })

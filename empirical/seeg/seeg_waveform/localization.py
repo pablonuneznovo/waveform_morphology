@@ -1,10 +1,4 @@
-"""Matching recorded channels to the exported contact coordinates.
 
-Channel names are written differently by the recording system and by
-Brainstorm, so the two have to be normalised to a common stem before they can
-be joined. build_localization_table() produces that join and summarize_match()
-reports what failed to match.
-"""
 
 import re
 from dataclasses import dataclass
@@ -14,7 +8,6 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 
-
 @dataclass(frozen=True)
 class LocalizationPaths:
     subject_id: str
@@ -22,18 +15,15 @@ class LocalizationPaths:
     waveform_summary: Path
     output_dir: Path
 
-
 def normalize_channel_name(name: object) -> str:
-    """Normalize contact labels across Brainstorm and stimulation MAT files."""
+
     text = str(name).strip()
     text = re.sub(r"\s+", "", text)
     return text.upper()
 
-
 def contact_stem(name: str) -> str:
     match = re.match(r"([A-Za-z]+)", str(name).strip())
     return match.group(1).upper() if match else ""
-
 
 def load_brainstorm_channels(channel_mat: Path) -> pd.DataFrame:
     mat = sio.loadmat(channel_mat, squeeze_me=True, struct_as_record=False)
@@ -65,9 +55,8 @@ def load_brainstorm_channels(channel_mat: Path) -> pd.DataFrame:
     out = pd.DataFrame(rows)
     if out.empty:
         return out
-    # Keep the first coordinate if Brainstorm contains duplicate labels.
-    return out.drop_duplicates("channel_norm", keep="first").reset_index(drop=True)
 
+    return out.drop_duplicates("channel_norm", keep="first").reset_index(drop=True)
 
 def load_subject_waveform(summary_csv: Path, subject_id: str) -> pd.DataFrame:
     df = pd.read_csv(summary_csv)
@@ -81,7 +70,6 @@ def load_subject_waveform(summary_csv: Path, subject_id: str) -> pd.DataFrame:
     )
     return out
 
-
 def build_localization_table(paths: LocalizationPaths) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     coords = load_brainstorm_channels(paths.channel_mat)
     waveform = load_subject_waveform(paths.waveform_summary, paths.subject_id)
@@ -92,7 +80,6 @@ def build_localization_table(paths: LocalizationPaths) -> tuple[pd.DataFrame, pd
     merged = waveform.merge(coords, on="channel_norm", how="left", suffixes=("_waveform", "_loc"))
     merged["waveform_match"] = merged["x_mm"].notna()
     return coords, waveform, merged
-
 
 def summarize_match(coords: pd.DataFrame, waveform: pd.DataFrame, merged: pd.DataFrame) -> dict[str, object]:
     channel_col = "channel_waveform" if "channel_waveform" in merged.columns else "channel"
@@ -110,7 +97,6 @@ def summarize_match(coords: pd.DataFrame, waveform: pd.DataFrame, merged: pd.Dat
         if "waveform_match" in merged
         else "",
     }
-
 
 def make_region_template(coords: pd.DataFrame) -> pd.DataFrame:
     cols = ["channel", "channel_norm", "shaft", "region_label", "hemisphere", "notes"]

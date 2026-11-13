@@ -8,7 +8,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-
 RED = "#E64B35"
 CYAN = "#4DBBD5"
 TEAL = "#00A087"
@@ -16,7 +15,6 @@ NAVY = "#3C5488"
 GREY = "#8A8A8A"
 REGION_CYCLE = [NAVY, RED, TEAL, CYAN, "#F39B7F", "#8491B4",
                 "#91D1C2", "#7E6148", "#DC0000", "#B09C85"]
-
 
 def apply_style(saved_width_in):
     scale = saved_width_in / 6.27
@@ -58,7 +56,6 @@ COMMON_COLS = ["mean_if", "asc2desc", "peak2trough",
                "mean_coh", "mean_abs_imcoh", "pdc_asymmetry", "mean_io_adaptive"]
 post = post.dropna(subset=COMMON_COLS).reset_index(drop=True)
 
-# -- Patient grouping ----------------------------------------------------------
 REPEAT_SESSIONS = {"HEJ_Subject004": "HEJ_Subject001",
                    "HEJ_Subject015": "HEJ_Subject014"}
 post["record"]  = post["subject"]
@@ -71,7 +68,7 @@ WAVEFORM = [
     {"col": "asc2desc",    "label": "Ascent/descent\nratio"},
     {"col": "peak2trough", "label": "Peak/trough\nratio"},
 ]
-# One acronym set across every figure in the paper. This
+
 CONNECTIVITY = [
     {"col": "mean_coh",       "label": "Coh",     "short": "Coh"},
     {"col": "mean_abs_imcoh", "label": "|ImCoh|", "short": "|ImCoh|"},
@@ -102,8 +99,7 @@ def stars(p):
     return "ns"
 
 def fmt_p(p):
-    """Inset p-value. A Wilcoxon p below 0.0005 rounds to 0.000 at three
-    decimals, which reads as exactly zero; print an inequality instead."""
+
     if not np.isfinite(p):
         return "= n/a"
     if p < 0.001:
@@ -123,14 +119,13 @@ def within_subject_stats(df, x, y):
     return float(np.median(rhos)), p_wilcox, len(rhos)
 
 def panel_label(ax, letter):
-    # Anchor to the top-left CORNER in offset points so the letter always sits
-    # in the margin above/left of the axis, clear of the top y-tick number.
+
     ax.annotate(letter.lower(), xy=(0, 1), xycoords="axes fraction",
                 xytext=(-40, 12), textcoords="offset points",
                 fontsize=16*K, fontweight="bold", ha="right", va="bottom")
 
 rng = np.random.default_rng(42)
-SCATTER_N = 3000   # subsample scatter for readability; stats use all electrodes
+SCATTER_N = 3000
 
 NROW = len(CONNECTIVITY)
 fig = plt.figure(figsize=(14, 4 * NROW))

@@ -15,22 +15,17 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch, Circle
 NAVY = "#1B3A57"
 CYAN = "#3FB8DE"
 RED = "#C44536"
-ELEC_BLUE = "#4C8BB5"        # electrode colour used in the montage figures
-PAIR_RED = "#C44536"         # bipolar pairing colour used in the montage figures
+ELEC_BLUE = "#4C8BB5"
+PAIR_RED = "#C44536"
 
-# The array image ships with the code, so this one needs no data root.
 CODE = Path(__file__).resolve().parent
 
 ARRAY_PNG = CODE / "figures_assets" / "ecog_array.png"
 
-# The boxes have to fit inside the axis: at full width the last one clips.
-# Boxes now span 0.008-0.990 of the axis with equal gaps, and are drawn with
-# clip_on=False so the rounded border can never be cut.
 BOX_W = 0.204
 _GAP = (0.990 - 0.008 - 4 * BOX_W) / 3
 BOX_X = [0.008 + i * (BOX_W + _GAP) for i in range(4)]
 BOX_Y0, BOX_Y1 = 0.06, 0.94
-
 
 def _box(ax, x0, title, fs):
     ax.add_patch(
@@ -45,7 +40,6 @@ def _box(ax, x0, title, fs):
             ha="center", va="top", fontsize=9.5 * fs, fontweight="bold",
             color=NAVY, zorder=4)
 
-
 def _arrow(ax, x_from, x_to, y=0.5):
     ax.add_patch(
         FancyArrowPatch(
@@ -56,9 +50,8 @@ def _arrow(ax, x_from, x_to, y=0.5):
         )
     )
 
-
 def draw_schematic(ax, fs: float = 1.0) -> None:
-    """Render the macaque ECoG pipeline schematic into `ax` (full-width axis)."""
+
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
@@ -74,12 +67,9 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
     for i in range(3):
         _arrow(ax, BOX_X[i] + BOX_W + 0.004, BOX_X[i + 1] - 0.004)
 
-    # --- box 1: macaque cortex with the subdural array ---
     x0 = BOX_X[0]
     if ARRAY_PNG.exists():
-        # the asset is the graphic as it was rendered in the reviewed figure,
-        # already trimmed, so it goes back at the rect it occupied there and is
-        # stretched to fill it rather than letterboxed a second time
+
         img = mpimg.imread(str(ARRAY_PNG))
         iax = ax.inset_axes([x0 + 0.0333, 0.2178, 0.1377, 0.5358],
                             transform=ax.transAxes, zorder=5)
@@ -94,11 +84,10 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
             transform=ax.transAxes, ha="center", va="center",
             fontsize=7.6 * fs, color="0.25", zorder=6)
 
-    # --- box 2: neighbouring surface electrodes -> alpha mode ---
     x0 = BOX_X[1]
     cx = x0 + BOX_W / 2
     ey = BOX_Y1 - 0.20
-    # a small patch of the array: the paired electrodes plus unpaired neighbours
+
     for dx, dy in ((-0.062, 0.035), (0.062, 0.035), (-0.062, -0.035), (0.062, -0.035)):
         ax.plot([cx + dx], [ey + dy], transform=ax.transAxes, marker="o",
                 markersize=4.2, color=ELEC_BLUE, markeredgecolor="white",
@@ -122,7 +111,6 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
     ax.text(cx, BOX_Y0 + 0.052, "1,431 bipolar channels", transform=ax.transAxes,
             ha="center", va="center", fontsize=7.4 * fs, color="0.25", zorder=5)
 
-    # --- box 3: one cycle with control points ---
     x0 = BOX_X[2]
     cx = x0 + BOX_W / 2
     ph = np.linspace(0, 1, 300)
@@ -147,7 +135,6 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
             ha="center", va="center", fontsize=8.2 * fs, color=NAVY,
             fontweight="bold", zorder=5)
 
-    # --- box 4: single-channel vs between-channel ---
     x0 = BOX_X[3]
     cx = x0 + BOX_W / 2
     ya = BOX_Y1 - 0.22
@@ -176,13 +163,11 @@ def draw_schematic(ax, fs: float = 1.0) -> None:
     ax.text(cx, BOX_Y0 + 0.085, "mixed-effects model", transform=ax.transAxes,
             ha="center", va="center", fontsize=7.4 * fs, color="0.25", zorder=5)
 
-
 plt.rcParams.update({
     "font.family": "Arial", "font.size": 10 * FS,
     "axes.spines.top": False, "axes.spines.right": False,
     "pdf.fonttype": 42,
 })
-
 
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
@@ -194,10 +179,9 @@ elec  = pd.read_csv(OUT_DIR / "ecog_primary_lme.csv")
 subj  = pd.read_csv(OUT_DIR / "ecog_primary_session_results.csv")
 betas = pd.read_csv(OUT_DIR / "ecog_primary_session_betas.csv")
 
-# outcome order: four between-channel measures, then univariate set apart
 OUTCOME_ORDER = ["mean_coh", "mean_abs_imcoh", "pdc_asymmetry",
                  "mean_io_adaptive", "uni_irrev"]
-# Acronyms, the identical set to the sEEG companion
+
 OUTCOME_LABELS = {
     "mean_coh"      : "Coh",
     "mean_abs_imcoh": "|ImCoh|",
@@ -219,7 +203,6 @@ FEATURE_TITLES = {
     "peak2trough_z": "Peak/trough ratio",
 }
 
-# y positions: gap between the between-channel block and univariate
 Y_POS   = {c: float(i) for i, c in enumerate(OUTCOME_ORDER[:4])}
 Y_POS[OUTCOME_ORDER[4]] = 4.7
 Y_ORDER = [Y_POS[c] for c in OUTCOME_ORDER]
@@ -236,7 +219,7 @@ def sig_stars(p: float) -> str:
             "*"   if p < 0.05  else "ns")
 
 def star_x(x: float) -> float:
-    """Keep a significance star inside the axes even for edge-of-panel markers."""
+
     pad = 0.055 * XLIM
     return float(np.clip(x, -XLIM + pad, XLIM - pad))
 
@@ -245,7 +228,6 @@ def panel_letter(ax, letter: str) -> None:
                 xytext=(-46, 14), textcoords="offset points",
                 fontsize=15*FS, fontweight="bold", va="top", ha="left")
 
-# Three-row grid: the schematic across the top, then the 2x3 of results.
 fig = plt.figure(figsize=(13.2, 11.0))
 gs = fig.add_gridspec(3, 3, height_ratios=[0.60, 1.0, 1.0],
                       hspace=0.16, wspace=0.16,
@@ -265,7 +247,7 @@ rng = np.random.default_rng(11)
 n_clipped = 0
 
 for col, feat in enumerate(FEATURES):
-    # --- top row: electrode-level ---
+
     ax = axes[0][col]
     for outcome in OUTCOME_ORDER:
         row   = elec[(elec["outcome"] == outcome) & (elec["feature"] == feat)].iloc[0]
@@ -283,7 +265,6 @@ for col, feat in enumerate(FEATURES):
                     color="black", fontweight="bold")
     ax.set_title(FEATURE_TITLES[feat], fontsize=13*FS, fontweight="bold", pad=10)
 
-    # --- bottom row: patient-level ---
     ax = axes[1][col]
     for outcome in OUTCOME_ORDER:
         srow  = subj[(subj["outcome"] == outcome) & (subj["feature"] == feat)].iloc[0]
@@ -320,12 +301,12 @@ for r in range(2):
         ax = axes[r][c]
         ax.axvspan(-SEEG_XLIM, SEEG_XLIM, color="0.93", zorder=0)
         ax.axvline(0, color="0.5", lw=1, ls="--", zorder=1)
-        # faint separator between the between-channel block and univariate
+
         ax.axhline(4.0, color="0.85", lw=1.0, ls="-", zorder=0)
         ax.set_xlim(-XLIM, XLIM)
         ax.set_ylim(-0.7, 5.5)
         ax.tick_params(axis="x", labelsize=11*FS)
-        # The schematic is panel a, so the grid runs b-g.
+
         panel_letter(ax, "BCDEFG"[r * 3 + c])
         if r == 0:
             plt.setp(ax.get_xticklabels(), visible=False)
@@ -360,7 +341,6 @@ legend_handles = [
 fig.legend(handles=legend_handles, loc="lower center", ncol=5,
            fontsize=10*FS, frameon=False, bbox_to_anchor=(0.5, 0.008))
 
-# NOTE: no tight_layout - gridspec margins are set explicitly above.
 stem = "fig7"
 fig.savefig(FIG_DIR / f"{stem}.png", dpi=600, bbox_inches="tight")
 fig.savefig(FIG_DIR / f"{stem}.svg", bbox_inches="tight")

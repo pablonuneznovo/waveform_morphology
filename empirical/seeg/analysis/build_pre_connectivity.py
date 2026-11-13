@@ -1,18 +1,10 @@
-"""
-build_pre_connectivity.py - 25 records from 23 patients, bipolar montage
-Aggregate PRE-stimulation connectivity to the electrode level (|ImCoh|, PDC
-asymmetry, TII, coherence)
 
-Output: outputs/electrode_level_connectivity_pre.csv
-"""
+
 import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
 TABLE_DIR = ROOT / "seeg" / "pair_tables" / "tables" / "bipolar"
@@ -35,7 +27,6 @@ for ch in pd.read_csv(TABLE_DIR / "all_pairs_connectivity.csv", usecols=COLS,
     tot += len(ch); n += 1
     ch["pdc_valid"] = ch["pdc_valid"].astype(str).str.lower() == "true"
 
-    # symmetric: |ImCoh|, coh, TII
     for col, store in (("abs_imcoh", imcoh_p), ("coh", coh_p), ("tra_unsigned", tra_p)):
         base = ch[KEY + ["channel_a", "channel_b", col]]
         a = base.rename(columns={"channel_a": "channel", "channel_b": "_p"})
@@ -45,7 +36,6 @@ for ch in pd.read_csv(TABLE_DIR / "all_pairs_connectivity.csv", usecols=COLS,
         store.append(st.groupby(GRP, as_index=False)
                        .agg(s=(col, "sum"), c=("_n", "sum")))
 
-    # directional: gPDC
     pdc = ch[ch["pdc_valid"] & ch["gpdc_a_to_b"].notna() & ch["gpdc_b_to_a"].notna()]
     if not pdc.empty:
         pa = pdc[KEY + ["channel_a", "gpdc_a_to_b", "gpdc_b_to_a"]].rename(

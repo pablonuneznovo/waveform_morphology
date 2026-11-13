@@ -1,13 +1,4 @@
-"""The all-pairs run: raw recordings to pair-level tables.
 
-The entry point of the analysis. For every recording it builds the montage,
-preprocesses and decomposes each channel, computes the waveform measures and
-every pairwise connectivity measure, and writes the pair-level tables that all
-the later scripts read. Also holds the inference used on those tables: the
-bootstrap confidence intervals, the permutation nulls (including the
-hierarchical label null that respects patient structure) and the summary
-reports.
-"""
 
 from itertools import combinations
 from pathlib import Path
@@ -35,10 +26,8 @@ from .primary_bipolar_mne import (
     make_bipolar_run,
 )
 
-
 FEATURES = ("mean_if", "asc2desc", "peak2trough")
 CACHE_VERSION = "all_pairs_imf4_v8"
-
 
 def _read_cached_csv(path: Path) -> pd.DataFrame:
     try:
@@ -46,11 +35,10 @@ def _read_cached_csv(path: Path) -> pd.DataFrame:
     except pd.errors.EmptyDataError:
         return pd.DataFrame()
 
-
 def temporal_irreversibility_unsigned(
     x: np.ndarray, y: np.ndarray, max_lag: int, covariance_epsilon: float = 1e-14
 ) -> tuple[float, str]:
-    """Exact Python translation of invariant_features_bivariate_v2.m, S=0."""
+
     x = np.asarray(x, float).ravel()
     y = np.asarray(y, float).ravel()
     if x.size != y.size or x.size <= max_lag + 2 or not np.isfinite(x).all() or not np.isfinite(y).all():
@@ -58,16 +46,13 @@ def temporal_irreversibility_unsigned(
     x_sd, y_sd = float(np.std(x, ddof=1)), float(np.std(y, ddof=1))
     if x_sd <= np.finfo(float).eps or y_sd <= np.finfo(float).eps:
         return np.nan, "degenerate_covariance"
-    # TRA is invariant to separate positive scaling of A and B. Scale by each
-    # SD for numerical conditioning, but do not center: MATLAB xcorr with the
-    # supplied implementation operates on the raw Hilbert-envelope levels.
+
     x = x / x_sd
     y = y / y_sd
     covariance_det = float(np.linalg.det(np.cov(np.column_stack([x, y]), rowvar=False)))
     if not np.isfinite(covariance_det) or covariance_det <= covariance_epsilon:
         return np.nan, "degenerate_covariance"
-    # Positive-lag full correlations reproduce the two MATLAB dot products
-    # exactly, while the FFT implementation avoids one O(n) loop per lag.
+
     y_after_x = signal.correlate(y, x, mode="full", method="fft")
     x_after_y = signal.correlate(x, y, mode="full", method="fft")
     center = x.size - 1
@@ -76,7 +61,6 @@ def temporal_irreversibility_unsigned(
         y_after_x[center + lag_index] - x_after_y[center + lag_index]
     ) / (x.size - lag_index)
     return float(np.sqrt(np.mean(values**2) / covariance_det)), "ok"
-
 
 def _gpdc_from_fit(fit, fs: float, band: tuple[float, float], epsilon: float) -> tuple[float, float]:
     freqs = np.linspace(band[0], band[1], 64)
@@ -91,9 +75,8 @@ def _gpdc_from_fit(fit, fs: float, band: tuple[float, float], epsilon: float) ->
         from_b = np.abs(af[:, 1]) ** 2 / variances
         a_to_b[fi] = from_a[1] / max(from_a.sum(), epsilon)
         b_to_a[fi] = from_b[0] / max(from_b.sum(), epsilon)
-    # Matrix convention: target row, source column.
-    return float(a_to_b.mean()), float(b_to_a.mean())
 
+    return float(a_to_b.mean()), float(b_to_a.mean())
 
 def generalized_pdc_pair(
     x: np.ndarray,
@@ -105,7 +88,7 @@ def generalized_pdc_pair(
     whiteness_alpha: float = 0.01,
     epsilon: float = 1e-12,
 ) -> dict:
-    """Estimate squared bivariate gPDC A->B and B->A with guarded VAR diagnostics."""
+
     down = int(round(target_fs))
     up = int(round(fs))
     divisor = np.gcd(down, up)
@@ -145,13 +128,11 @@ def generalized_pdc_pair(
         "gpdc_log_ratio": np.log((a_to_b + epsilon) / (b_to_a + epsilon)),
     }
 
-
 def _pair_type(a: pd.Series, b: pd.Series) -> str:
     left, right = bool(a["is_stimulated_channel"]), bool(b["is_stimulated_channel"])
     if left or right:
         return "seed_to_target"
     return "nonstimulated_to_nonstimulated"
-
 
 def _pair_dynamics(
     signal_a: np.ndarray,
@@ -178,7 +159,6 @@ def _pair_dynamics(
     )
     return pdc, tra, tra_status
 
-
 def _prepare_run(path: Path, montage: str, base_cfg: dict, entry_index: int = 0):
     run = make_bipolar_run(path, base_cfg, entry_index=entry_index)
     if run.status != "ok":
@@ -187,7 +167,6 @@ def _prepare_run(path: Path, montage: str, base_cfg: dict, entry_index: int = 0)
     pre = _decompose_window(run.recording, window_mask(run.recording.time, *pre_range), base_cfg)
     post = _decompose_window(run.recording, window_mask(run.recording.time, *post_range), base_cfg)
     return run, pre, post
-
 
 def analyze_run(path: Path, montage: str, base_cfg: dict, cfg: dict, entry_index: int = 0) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     run, pre, post = _prepare_run(path, montage, base_cfg, entry_index=entry_index)
@@ -274,7 +253,6 @@ def analyze_run(path: Path, montage: str, base_cfg: dict, cfg: dict, entry_index
             })
     return pd.DataFrame(feature_rows), pd.DataFrame(pair_rows), pd.DataFrame(qc_rows)
 
-
 _RUN_COLUMNS = [
     "montage", "file", "entry_index", "subject", "stim_frequency_hz", "epoch",
     "hypothesis", "family", "n_pairs", "spearman_rho", "pooled_pair_p_descriptive",
@@ -283,7 +261,6 @@ _SUBJECT_COLUMNS = [
     "montage", "subject", "stim_frequency_hz", "epoch", "hypothesis", "family",
     "mean_run_rho", "n_runs",
 ]
-
 
 def correlation_tables(pairs: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     if pairs.empty or "montage" not in pairs.columns:
@@ -329,12 +306,10 @@ def correlation_tables(pairs: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd
     )
     return run, subject
 
-
 def _bootstrap_ci(values: np.ndarray, n_bootstraps: int, rng: np.random.Generator) -> tuple[float, float]:
     indices = rng.integers(0, len(values), size=(n_bootstraps, len(values)))
     boot = values[indices].mean(axis=1)
     return float(np.quantile(boot, 0.025)), float(np.quantile(boot, 0.975))
-
 
 def _permuted_run_rhos(
     group: pd.DataFrame,
@@ -343,7 +318,7 @@ def _permuted_run_rhos(
     rng: np.random.Generator,
     batch_size: int = 250,
 ) -> np.ndarray:
-    """Permute channel feature labels and preserve the fixed connectivity matrix."""
+
     metric = hypothesis["waveform_metric"]
     transform = hypothesis["transform"]
     y_name = hypothesis["connectivity_metric"]
@@ -398,7 +373,6 @@ def _permuted_run_rhos(
             where=denominator > np.finfo(float).eps,
         )
     return result
-
 
 def _hierarchical_label_null(
     pairs: pd.DataFrame,
@@ -467,7 +441,6 @@ def _hierarchical_label_null(
         where=count > 0,
     )
 
-
 _INFERENCE_COLUMNS = [
     "montage", "stim_frequency_hz", "epoch", "hypothesis", "family",
     "n_subjects", "mean_subject_rho", "median_subject_rho",
@@ -475,9 +448,8 @@ _INFERENCE_COLUMNS = [
     "p_fdr_within_family",
 ]
 
-
 def summarize_inference(subject: pd.DataFrame, pairs: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """Equal-participant inference using within-run channel-label permutations."""
+
     if subject.empty or "montage" not in subject.columns:
         return pd.DataFrame(columns=_INFERENCE_COLUMNS)
     rng = np.random.default_rng(cfg["analysis"]["random_seed"])
@@ -492,8 +464,7 @@ def summarize_inference(subject: pd.DataFrame, pairs: pd.DataFrame, cfg: dict) -
         hypothesis = next(
             item for item in cfg["statistics"]["hypotheses"] if item["name"] == keys[3]
         )
-        # Pre is retained as baseline context. Formal permutation inference is
-        # prespecified for post and for the post-minus-pre association change.
+
         if keys[2] == "pre":
             p = np.nan
         else:
@@ -526,7 +497,6 @@ def summarize_inference(subject: pd.DataFrame, pairs: pd.DataFrame, cfg: dict) -
             )[1]
     return out[_INFERENCE_COLUMNS]
 
-
 HYPOTHESIS_LABELS = {
     "if_matching_imcoh": "|Instantaneous frequency difference| vs |imaginary coherence|",
     "ascdesc_direction_pdc": "Log ascent/descent ratio vs log generalized PDC ratio",
@@ -550,12 +520,10 @@ HYPOTHESIS_SHORT_LABELS = {
     "peaktrough_mismatch_tra": "Peak/trough difference vs TRA",
 }
 
-
 def _save_figure(fig: plt.Figure, stem: Path) -> None:
     fig.savefig(stem.with_suffix(".png"), dpi=300, bbox_inches="tight")
     fig.savefig(stem.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
-
 
 def make_summary_figures(
     pairs: pd.DataFrame,
@@ -564,8 +532,7 @@ def make_summary_figures(
     output_dir: Path,
 ) -> list[Path]:
     if pairs.empty or "montage" not in pairs.columns or inference.empty:
-        # No eligible runs: every run excluded, for instance too few channels
-        # for the montage. Nothing to plot.
+
         return []
     output_dir.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({
@@ -755,7 +722,6 @@ def make_summary_figures(
             _save_figure(fig, stem); paths.extend([stem.with_suffix(".png"), stem.with_suffix(".pdf")])
     return paths
 
-
 def write_supervisor_summary(
     features: pd.DataFrame,
     pairs: pd.DataFrame,
@@ -822,7 +788,6 @@ def write_supervisor_summary(
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-
 def generate_reports_from_tables(config_path: str | Path) -> dict[str, Path]:
     cfg = load_config(config_path)
     root = Path(cfg["project"]["output_dir"])
@@ -837,7 +802,6 @@ def generate_reports_from_tables(config_path: str | Path) -> dict[str, Path]:
     summary_path = root / "SUPERVISOR_SUMMARY.txt"
     write_supervisor_summary(features, pairs, qc, inference, summary_path)
     return {"supervisor_summary": summary_path, "figures": figure_dir}
-
 
 def combine_montage_outputs(config_path: str | Path) -> dict[str, Path]:
     cfg = load_config(config_path)
@@ -864,7 +828,6 @@ def combine_montage_outputs(config_path: str | Path) -> dict[str, Path]:
         outputs[name] = path
     outputs.update(generate_reports_from_tables(config_path))
     return outputs
-
 
 def run_all_pairs(
     config_path: str | Path,
@@ -947,7 +910,6 @@ def run_all_pairs(
     if figure_paths:
         paths["figures"] = root / "figures" / "full_dataset"
     return paths
-
 
 ROOT_CONFIGS = {
     "bipolar": Path(__file__).resolve().parents[1] / "analysis" / "configs" / "bipolar_npz_windows.yaml",

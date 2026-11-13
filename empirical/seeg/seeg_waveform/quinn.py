@@ -1,18 +1,8 @@
-"""The empirical mode decomposition and the cycle-level shape measures.
 
-Follows Quinn et al. 2021 (J Neurophysiol 126:1190-1208) and uses their emd
-package. build_sift_config() holds the masked-sift settings; analyze_segment()
-runs the sift and the Hilbert transform, finds and screens individual cycles,
-and returns the two control-point ratios together with the phase-aligned
-instantaneous-frequency profile. asc2desc() is the fraction of the cycle spent
-rising, 0.5 for a symmetric waveform; peak2trough() is the relative position of
-the descending zero crossing. The alpha mode is the fourth IMF throughout.
-"""
 
 from dataclasses import dataclass
 
 import numpy as np
-
 
 @dataclass
 class SegmentResult:
@@ -26,7 +16,6 @@ class SegmentResult:
     phase_aligned_if: np.ndarray | None
     normalized_waveform: np.ndarray | None
     message: str = ""
-
 
 def build_sift_config(fs: float, max_imfs: int = 6, nphases: int = 4) -> dict:
     return {
@@ -43,7 +32,6 @@ def build_sift_config(fs: float, max_imfs: int = 6, nphases: int = 4) -> dict:
         "mask_freqs": np.array([80, 40, 20, 10, 5, 2, 1], dtype=float) / float(fs),
     }
 
-
 def _as_2d_imf(imf: np.ndarray) -> np.ndarray:
     arr = np.asarray(imf)
     arr = np.squeeze(arr)
@@ -53,10 +41,8 @@ def _as_2d_imf(imf: np.ndarray) -> np.ndarray:
         arr = arr.T
     return arr
 
-
 def compute_range(x: np.ndarray) -> float:
     return float(np.nanmax(x) - np.nanmin(x))
-
 
 def asc2desc(x: np.ndarray) -> float:
     import emd
@@ -68,7 +54,6 @@ def asc2desc(x: np.ndarray) -> float:
     asc = pt + (len(x) - tt)
     return float(asc / len(x))
 
-
 def peak2trough(x: np.ndarray) -> float:
     import emd
 
@@ -76,7 +61,6 @@ def peak2trough(x: np.ndarray) -> float:
     if des is None:
         return np.nan
     return float(des / len(x))
-
 
 def analyze_segment(x: np.ndarray, fs: float, cfg: dict) -> SegmentResult:
     import emd
@@ -136,9 +120,8 @@ def analyze_segment(x: np.ndarray, fs: float, cfg: dict) -> SegmentResult:
 
     return SegmentResult("ok", len(table), table, imf, ip, ifreq, iamp, pa_if, norm_waveform)
 
-
 def summarize_decomposed_imf(result: SegmentResult, imf_index: int, cfg: dict) -> SegmentResult:
-    """Compute cycle-level waveform profiles for one IMF from an existing decomposition."""
+
     import emd
 
     if result.imf is None or result.ip is None or result.ifreq is None or result.iamp is None:

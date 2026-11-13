@@ -1,23 +1,5 @@
-"""
-compute_insideout_adaptive.py - bivariate time-irreversibility, 25 records from
-23 patients, bipolar montage.
 
-The INSIDEOUT measure (Deco et al. 2023) compares the forward and reversed
-cross-correlation of a pair at a shift T, and T is defined as a quarter period of
-the pair's own dominant frequency. That detail decides the result here. Electrode
-mean instantaneous frequency in this dataset spans roughly 6 to 14 Hz, so a single
-global T would only be correct near 10 Hz: holding the coupling identical and
-varying the frequency alone from 8 to 13 Hz moves a fixed-T value by a factor of
-about 70. Since instantaneous frequency is one of the predictors in the models,
-a fixed T would build the frequency effect into the outcome.
 
-T is therefore computed per pair from that pair's own mean instantaneous
-frequency, f_pair = mean(mean_if_a, mean_if_b), giving T = round(fs / (4 *
-f_pair)); the mean_if values come from the post-epoch feature table.
-
-Output: electrode_level_irrev_adaptiveT.csv (column mean_io_adaptive)
-        Batches: insideout_adaptive_batches/
-"""
 import argparse, os, sys, time
 from pathlib import Path
 import numpy as np, pandas as pd
@@ -33,8 +15,7 @@ sys.path.insert(0, str(CODE / "seeg"))
 CFG_PATH  = CODE / "seeg" / "analysis" / "configs" / "bipolar_npz_windows.yaml"
 TABLE_DIR = ROOT / "seeg" / "pair_tables" / "tables" / "bipolar"
 def _work_dir():
-    """Batch files are large; keep them next to the data if that folder
-    exists, otherwise in WAVEFORM_ALPHA_WORK."""
+
     for d in (str(ROOT / "seeg" / "irrev_intermediates"), str(WORK)):
         try:
             p = Path(d)
@@ -47,11 +28,10 @@ def _work_dir():
 OUT_DIR   = _work_dir()
 BATCH_DIR = OUT_DIR / "insideout_adaptive_batches"
 IMF4_IDX  = 3
-FALLBACK_HZ = 10.0     # only if a channel has no mean_if
-
+FALLBACK_HZ = 10.0
 
 def _insideout(a, b, T):
-    """Reference INSIDEOUT (Deco et al. 2023), 2x2 form incl. diagonal terms."""
+
     X = np.vstack([a, b]).astype(float)
     X -= X.mean(axis=1, keepdims=True)
     sd = X.std(axis=1, keepdims=True); sd[sd < np.finfo(float).eps] = np.finfo(float).eps
@@ -65,7 +45,6 @@ def _insideout(a, b, T):
     Cf = np.clip(Cf, -0.999999, 0.999999); Cr = np.clip(Cr, -0.999999, 0.999999)
     FSf = -0.5 * np.log(1 - Cf ** 2); FSr = -0.5 * np.log(1 - Cr ** 2)
     return float(np.mean((FSf - FSr) ** 2))
-
 
 def process_recording(path_str, file_stem, entry_index, whitelist, mif_map):
     import numpy as np
@@ -110,7 +89,7 @@ def process_recording(path_str, file_stem, entry_index, whitelist, mif_map):
             f_pair = np.nanmean([fa, fb])
             if not np.isfinite(f_pair) or f_pair <= 0:
                 f_pair = FALLBACK_HZ
-            # ADAPTIVE T: quarter period of THIS pair's own frequency
+
             T = max(1, int(round(fs / (4.0 * f_pair))))
             if T >= len(sig[a]) // 4:
                 continue
@@ -130,7 +109,6 @@ def process_recording(path_str, file_stem, entry_index, whitelist, mif_map):
                     "channel": c, "mean_io_adaptive": io_sum[c] / cnt[c],
                     "mean_T_used": Tsum[c] / cnt[c], "n_pairs": cnt[c]})
     return out
-
 
 def main():
     ap = argparse.ArgumentParser()
@@ -188,7 +166,6 @@ def main():
     print(f"  mean T used      : {df.mean_T_used.mean():.1f} samples "
           f"(a quarter period at 10 Hz would be {round(512/(4*10.0))})")
     print(f"saved: {OUT_DIR / 'electrode_level_irrev_adaptiveT.csv'}")
-
 
 if __name__ == "__main__":
     main()

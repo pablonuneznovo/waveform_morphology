@@ -8,7 +8,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-
 RED = "#E64B35"
 CYAN = "#4DBBD5"
 TEAL = "#00A087"
@@ -16,7 +15,6 @@ NAVY = "#3C5488"
 GREY = "#8A8A8A"
 REGION_CYCLE = [NAVY, RED, TEAL, CYAN, "#F39B7F", "#8491B4",
                 "#91D1C2", "#7E6148", "#DC0000", "#B09C85"]
-
 
 def apply_style(saved_width_in):
     scale = saved_width_in / 6.27
@@ -49,15 +47,14 @@ OUT_DIR = ROOT / "seeg" / "analysis" / "outputs"
 FIG_DIR = Path(__file__).resolve().parents[3] / "figures"
 
 NROW, NCOL = 2, 2
-LEFT_COL_LETTERS = ("A", "C")     # panels that keep the y tick labels
+LEFT_COL_LETTERS = ("A", "C")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 post = pd.read_csv(OUT_DIR / "electrode_level_summary_bipolar.csv", low_memory=False)
-# normalise stimulated-channel flag (stored as "True"/"False" strings)
+
 post["is_stimulated_channel"] = (post["is_stimulated_channel"].astype(str)
                                    .str.lower().eq("true"))
-# Common electrode subset - all waveform + connectivity metrics valid, same set
-# as Fig 1/2/3 and the LME. Electrode N is reported in the manuscript text.
+
 post = post.dropna(subset=["mean_if", "asc2desc", "peak2trough",
                            "mean_coh", "mean_abs_imcoh", "pdc_asymmetry", "mean_io_adaptive"]).reset_index(drop=True)
 print(f"Common-subset electrodes: {len(post):,}  |  Subjects: {post['subject'].nunique()}")
@@ -67,7 +64,7 @@ WAVEFORM_FEATURES = [
     {"col": "asc2desc",    "label": "Ascent/descent ratio"},
     {"col": "peak2trough", "label": "Peak/trough ratio"},
 ]
-# One acronym set across every figure in the paper (see S6_scatter.py).
+
 CONNECTIVITY = [
     {"col": "mean_coh",       "label": "Coh",     "short": "Coh"},
     {"col": "mean_abs_imcoh", "label": "|ImCoh|", "short": "|ImCoh|"},
@@ -102,7 +99,7 @@ def ols(x_arr, y_arr):
     return xs, m * xs + b
 
 def pfmt(p: float) -> str:
-    """p rounded to four places reads as 0.0000 when it is merely very small."""
+
     return "< 0.0001" if p < 1e-4 else "= %.4f" % p
 
 def stars(p):
@@ -125,7 +122,6 @@ def panel_letter(ax, letter):
     ax.text(-0.12, 1.05, letter.lower(), transform=ax.transAxes,
             fontsize=13*K, fontweight="bold", va="bottom", ha="left")
 
-# --- S10 - region-level bar chart ---
 print("S10: region-level ...")
 data_r = post[post["region_family"].isin(REGIONS_KEEP)].copy()
 fig, axes = plt.subplots(NROW, NCOL, figsize=(9.6, 9.0))
@@ -157,8 +153,7 @@ for ax, conn, letter in zip(axes, CONNECTIVITY, "ABCDEFG"):
         ha = "left" if rho >= 0 else "right"
         ax.text(rho + x_off, yi, f"{stars(fdr)}", va="center",
                 ha=ha, fontsize=9*K)
-    # With a 2x2 layout the region names belong on both left-column
-    # panels (a and c), not only the first.
+
     ax.set_yticks(y_pos, REGIONS_KEEP if letter in LEFT_COL_LETTERS
                   else [""] * len(REGIONS_KEEP))
     ax.axvline(0, color="0.4", lw=0.8, ls="--")

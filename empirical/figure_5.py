@@ -13,9 +13,6 @@ from matplotlib.lines import Line2D
 
 import matplotlib.image as mpimg
 
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
 CODE = Path(__file__).resolve().parent
@@ -33,7 +30,6 @@ NAVY = "#3C5488"
 GREY = "#8A8A8A"
 REGION_CYCLE = [NAVY, RED, TEAL, CYAN, "#F39B7F", "#8491B4",
                 "#91D1C2", "#7E6148", "#DC0000", "#B09C85"]
-
 
 def apply_style(saved_width_in):
     scale = saved_width_in / 6.27
@@ -64,17 +60,14 @@ OUT_DIR  = ROOT / "seeg" / "analysis" / "outputs"
 FIG_DIR  = CODE / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-# Panel a is the graphical abstract for this figure (the geometry vs
-# rate plane), so the figure opens with the concept and then shows the data.
 ABSTRACT_PNG = CODE / "figures_assets" / "graphical_abstract.png"
 
-# --- representative electrode (closest to population medians, high cycle count) ---
 FILE_NAME   = "HEJ_Subject005_F=1Hz_I=3mA_stims"
 ENTRY_INDEX = 62
 CHANNEL     = "Ep7-Ep8"
 
 IMF4_IDX = 3
-# peak / trough / descending zero and the three population histograms
+
 BLUE = NAVY
 GREEN = TEAL
 GOLD = CYAN
@@ -83,7 +76,6 @@ def panel_label(ax, letter, x=-0.10, y=1.05):
     ax.text(x, y, letter.lower(), transform=ax.transAxes,
             fontsize=NN["panel"], fontweight="bold", va="top")
 
-# --- recompute the decomposition ---
 cfg = load_config(CFG_PATH)
 paths = [p for p in iter_mat_files(cfg["project"]["data_dir"]) if p.stem == FILE_NAME]
 assert len(paths) == 1, f"expected 1 recording, found {len(paths)}"
@@ -108,7 +100,6 @@ print(f"  status={res.status}  n_cycles={res.n_cycles}  IMFs={imf.shape[1]}  PA-
 
 fs = float(rec.fs)
 
-# --- rebuild the Cycles object (same recipe as analyze_segment) for panel B ---
 ecfg = cfg["emd"]
 cycles = emd.cycles.Cycles(ip[:, IMF4_IDX])
 cycles.compute_cycle_metric("max_amp", iamp[:, IMF4_IDX], np.max)
@@ -136,8 +127,6 @@ for ii in orig_cycle_inds:
 print(f"  subset cycles: {len(orig_cycle_inds)}  with usable sample indices: {len(good_cycles)}")
 assert good_cycles, "no retained cycles resolved to sample indices"
 
-# --- layout ---
-# Six columns, so the top row can hold the graphical abstract at half
 fig = plt.figure(figsize=(14, 13.6))
 gs  = gridspec.GridSpec(3, 6, figure=fig, height_ratios=[1.55, 1.6, 1.0],
                         hspace=0.36, wspace=0.92)
@@ -153,7 +142,6 @@ ax_abs.imshow(mpimg.imread(str(ABSTRACT_PNG)))
 ax_abs.axis("off")
 panel_label(ax_abs, "A", x=-0.02)
 
-# --- PANEL A - signal + IMFs ---
 SHOW_SEC = 6.0
 n_show = int(SHOW_SEC * fs)
 t_s = t_post[:n_show]
@@ -192,7 +180,6 @@ ax_A.set_yticks([])
 ax_A.spines["left"].set_visible(False)
 panel_label(ax_A, "D")
 
-# --- PANEL B - representative cycle ---
 imf4 = imf[:, IMF4_IDX]
 a2d_vals = np.array([asc2desc(imf4[c]) for c in good_cycles])
 target = np.nanmedian(a2d_vals)
@@ -204,7 +191,6 @@ T     = len(seg)
 x_cyc = np.linspace(0, 1, T)
 seg_n = (seg - seg.min()) / (seg.max() - seg.min()) * 2 - 1
 
-# exact landmark samples, same functions used for the metrics
 i_peak = emd.cycles.cf_peak_sample(seg, interp=True)
 i_tro  = emd.cycles.cf_trough_sample(seg, interp=True)
 i_desc = emd.cycles.cf_descending_zero_sample(seg, interp=True)
@@ -241,10 +227,6 @@ ax_B.legend(fontsize=NN["legend"], frameon=False, loc="lower left",
             handlelength=0.8, handletextpad=0.4)
 panel_label(ax_B, "B", x=-0.46, y=1.12)
 
-# --- PANEL C - phase-aligned IF profile ---
-# The mean profile rather than an image of every cycle: an imshow here is
-# dominated by between-cycle noise and buries the quantity of interest. A
-# sinusoidal cycle has a flat instantaneous-frequency profile, so departure from
 n_bins, n_cyc = pa_if.shape
 phase = np.linspace(0, 360, n_bins)
 mean_profile = np.nanmean(pa_if, axis=1)
@@ -270,19 +252,14 @@ ax_C.set_xlabel("Phase (°)", fontsize=NN["label"])
 ax_C.set_ylabel("Instantaneous\nfrequency (Hz)", fontsize=NN["label"])
 ax_C.set_xticks([0, 90, 180, 270, 360])
 ax_C.set_xlim(0, 360)
-# Scale to the uncertainty, not to the profile range: zooming to the range alone
-# would magnify noise into apparent structure.
+
 _c = float(np.nanmean(mean_profile)); _s = float(sem_profile.mean())
 ax_C.set_ylim(_c - 4 * _s, _c + 4 * _s)
 ax_C.set_title("Phase-aligned IF profile", fontsize=NN["title"], pad=6)
 panel_label(ax_C, "C", x=-0.06)
 
-# --- PANEL D - population feature distributions ---
-# Common electrode subset (all waveform + connectivity metrics valid), same set
-# as every other figure and the LME. Electrode N is reported in the text.
 pop = pd.read_csv(OUT_DIR / "electrode_level_summary_bipolar.csv", low_memory=False)
-# The subset is defined by the outcomes the models actually use, so that every
-# figure and the models are fitted on one set of electrodes.
+
 pop = pop.dropna(subset=["mean_if", "asc2desc", "peak2trough", "mean_coh",
                          "mean_abs_imcoh", "pdc_asymmetry", "mean_io_adaptive"])
 FEAT_CONFIGS = [

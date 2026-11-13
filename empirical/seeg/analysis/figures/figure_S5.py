@@ -8,7 +8,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-# STYLE: the ggsci "npg" palette and type scale.
 RED = "#E64B35"
 CYAN = "#4DBBD5"
 TEAL = "#00A087"
@@ -16,7 +15,6 @@ NAVY = "#3C5488"
 GREY = "#8A8A8A"
 REGION_CYCLE = [NAVY, RED, TEAL, CYAN, "#F39B7F", "#8491B4",
                 "#91D1C2", "#7E6148", "#DC0000", "#B09C85"]
-
 
 def apply_style(saved_width_in):
     scale = saved_width_in / 6.27
@@ -67,9 +65,6 @@ def sig_stars(p):
 
 wf = pd.read_csv(TABLE_DIR / "channel_epoch_imf4_features.csv", low_memory=False)
 
-# --- load regenerated waveforms ---
-# (S5_waveforms_full.npz), so panels A/B share the same denominators as the
-# delta violins in C/D - no subsampling.
 wv = np.load(OUT_DIR / "S5_waveforms_full.npz", allow_pickle=False)
 pre_all, post_all = wv["pre"], wv["post"]
 is_stim_wv = wv["is_stimulated"].astype(bool)
@@ -78,7 +73,6 @@ stim_pre,    stim_post    = pre_all[is_stim_wv],  post_all[is_stim_wv]
 nonstim_pre, nonstim_post = pre_all[~is_stim_wv], post_all[~is_stim_wv]
 print(f"waveforms - stimulated: {len(stim_pre):,}  non-stimulated: {len(nonstim_pre):,}")
 
-# --- deltas for the violins ---
 KEY = ["file", "entry_index", "subject", "stim_frequency_hz",
        "channel", "is_stimulated_channel"]
 pre_f  = wf[wf["epoch"] == "pre" ][KEY + ["asc2desc", "peak2trough"]]
@@ -91,7 +85,6 @@ merged["is_stim"] = merged["is_stimulated_channel"].astype(str).str.lower().eq("
 stim_full, nonstim_full = merged[merged["is_stim"]], merged[~merged["is_stim"]]
 print(f"deltas     - stimulated: {len(stim_full):,}  non-stimulated: {len(nonstim_full):,}")
 
-# --- layout ---
 fig = plt.figure(figsize=(14, 10))
 gs  = gridspec.GridSpec(2, 2, figure=fig, hspace=0.42, wspace=0.35)
 ax_A = fig.add_subplot(gs[0, 0])
@@ -101,7 +94,6 @@ ax_D = fig.add_subplot(gs[1, 1])
 
 x_phase = np.linspace(0, 1, pre_all.shape[1])
 
-# --- PANELS A & B - grand mean waveforms ---
 def plot_waveform_panel(ax, pre_arr, post_arr, title, label):
     n = pre_arr.shape[0]
     mean_pre,  sem_pre  = pre_arr.mean(axis=0),  pre_arr.std(axis=0)  / np.sqrt(n)
@@ -117,9 +109,7 @@ def plot_waveform_panel(ax, pre_arr, post_arr, title, label):
     ax.axhline(0, color="0.75", lw=0.8, ls="--")
     ax.set_xlabel("Cycle phase  (0 → 1)", fontsize=11*K)
     ax.set_ylabel("Normalised amplitude", fontsize=11*K)
-    # No panel titles: the stimulated /
-    # non-stimulated distinction is stated in the caption. `title` is still
-    # accepted so the call sites are unchanged.
+
     ax.set_xlim(0, 1)
     ax.tick_params(axis="both", labelsize=10*K)
     ax.legend(fontsize=10*K, frameon=False, loc="lower left")
@@ -137,7 +127,6 @@ y_max = max(ax_A.get_ylim()[1], ax_B.get_ylim()[1])
 ax_A.set_ylim(y_min, y_max)
 ax_B.set_ylim(y_min, y_max)
 
-# --- PANELS C & D - delta violins ---
 rng = np.random.default_rng(42)
 for ax, feat, ylabel, letter in [
     (ax_C, "delta_asc2desc",    "Δ Ascent/descent ratio\n(post − pre)", "C"),
@@ -168,8 +157,7 @@ for ax, feat, ylabel, letter in [
     y_top = np.percentile(np.concatenate([ns_vals, st_vals]), 99)
     y_sig = y_top * 1.08
     ax.plot([0, 0, 1, 1], [y_top, y_sig, y_sig, y_top], color="0.3", lw=1.2)
-    # Report very small p-values as a threshold,
-    # matching the text
+
     p_label = "p < 0.001" if p_mw < 0.001 else f"p = {p_mw:.3f}"
     ax.text(0.5, y_sig * 1.04, f"{p_label}  {sig_stars(p_mw)}",
             ha="center", fontsize=10*K, color="0.2")

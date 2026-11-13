@@ -1,8 +1,5 @@
-"""
-build_coherence_electrode.py - 25-record bipolar (23 patients)
 
-Output: outputs/coh_electrode_bipolar.csv  (key + mean_coh, n_coh)
-"""
+
 import os
 from pathlib import Path
 import numpy as np

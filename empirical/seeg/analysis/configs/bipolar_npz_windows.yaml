@@ -1,18 +1,9 @@
-# Every parameter of the 25-record bipolar run: the analysis windows, the
-# preprocessing and rejection thresholds, the EMD settings, the connectivity
-# band and estimator, and the channel-retention rules. Read by
-# primary_bipolar_mne.py and by the scripts in seeg/analysis/.
-#
-# Paths are relative to the data root, so run from that folder or set
-# WAVEFORM_ALPHA to it.
 project:
   data_dir: seeg/raw/pre_stim_post_data
   atlas_dir: seeg/raw/SEEG_Coordinates
   freesurfer_dir: seeg/raw/freesurfer_subjects
   output_dir: seeg/analysis/outputs/bipolar_npz
-  # only one 3 Hz file exists in the whole dataset, excluded
-  # (Subject002), and it is not part of this analysis run.
- 
+
   exclude_file_patterns: ["F=3Hz", "Subject004_F=1Hz_I=3mA"]
 
 design:

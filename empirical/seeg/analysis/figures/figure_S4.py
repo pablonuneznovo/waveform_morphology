@@ -9,7 +9,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-# STYLE: the ggsci "npg" palette and type scale.
 RED = "#E64B35"
 CYAN = "#4DBBD5"
 TEAL = "#00A087"
@@ -17,7 +16,6 @@ NAVY = "#3C5488"
 GREY = "#8A8A8A"
 REGION_CYCLE = [NAVY, RED, TEAL, CYAN, "#F39B7F", "#8491B4",
                 "#91D1C2", "#7E6148", "#DC0000", "#B09C85"]
-
 
 def apply_style(saved_width_in):
     scale = saved_width_in / 6.27
@@ -44,22 +42,18 @@ def apply_style(saved_width_in):
 NN = apply_style(11.27)
 K  = NN["tick"] / 10.0
 
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
 OUT_DIR = ROOT / "seeg" / "analysis" / "outputs"
 FIG_DIR = Path(__file__).resolve().parents[3] / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-HILITE  = CYAN   # univariate - same colour it carries in Figs 6-7
-NEUTRAL = "#9AA6AE"    # the four between-channel measures
+HILITE  = CYAN
+NEUTRAL = "#9AA6AE"
 
 N_BOOT = 500
 RNG    = np.random.default_rng(42)
 
-# --- load + common subset ---
 uni  = pd.read_csv(OUT_DIR / "univariate_irreversibility.csv")
 uni  = uni[uni.status == "ok"]
 elec = pd.read_csv(OUT_DIR / "electrode_level_summary_bipolar.csv", low_memory=False)
@@ -78,10 +72,6 @@ REPEAT_SESSIONS = {"HEJ_Subject004": "HEJ_Subject001",
 m["subject"] = m["subject"].replace(REPEAT_SESSIONS)
 print(f"  -> resampling {m.subject.nunique()} patients")
 
-# Panel layout:
-#   - one colour across the bars in panel c: UTI's bar is 0.347 against 0.050
-#     for the next largest, so the separation reads from bar length alone and
-#     a colour highlight would be redundant.
 MEASURES = [
     ("uni_irrev",      "UTI",     True),
     ("pdc_asymmetry",  "PDC",     False),
@@ -97,7 +87,7 @@ def pooled_rho(frame: pd.DataFrame, col: str) -> float:
     return float(r)
 
 def bootstrap_ci(col: str, subject_groups: dict, subjects: np.ndarray) -> tuple[float, float]:
-    """95% CI for the pooled rho, resampling patients with replacement."""
+
     vals = []
     for _ in range(N_BOOT):
         pick = RNG.choice(subjects, size=subjects.size, replace=True)
@@ -115,7 +105,6 @@ subject_groups = {
     for s, g in m.groupby("subject")
 }
 
-# --- figure ---
 fig = plt.figure(figsize=(13, 10))
 gs = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[1.0, 0.9],
                        hspace=0.34, wspace=0.30)
@@ -150,7 +139,6 @@ scatter_panel(ax_a, "uni_irrev",
               "Univariate irreversibility\n(derivative skewness)", HILITE, "a")
 scatter_panel(ax_b, "mean_io_adaptive", "Bivariate irreversibility", NEUTRAL, "b")
 
-# --- panel c ---
 ax_c = fig.add_subplot(gs[1, :])
 labels, rhos, los, his, colors = [], [], [], [], []
 for col, lab, is_hi in MEASURES:
@@ -160,7 +148,7 @@ for col, lab, is_hi in MEASURES:
     rhos.append(r)
     los.append(lo)
     his.append(hi)
-    colors.append(NEUTRAL)   # no highlight: one colour across the bars
+    colors.append(NEUTRAL)
     print(f"  {lab.replace(chr(10), ' '):<44} |rho| {r:.3f}  CI [{lo:.3f}, {hi:.3f}]")
 
 rhos = np.array(rhos)

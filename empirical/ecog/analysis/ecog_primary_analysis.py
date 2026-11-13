@@ -1,23 +1,5 @@
-"""
-ecog_primary_analysis.py - the primary ECoG result: AwakeEyesClosed, all monkeys.
 
-Mirrors the sEEG design so the two datasets are directly comparable:
 
-  ELECTRODE LEVEL (top row of the figure)
-    outcome_z ~ mean_if_z + asc2desc_z + peak2trough_z + (1 | session)
-    Mixed model over all bipolar channels from every session. Session is the random
-    effect - the ECoG analog of the sEEG's (1 | subject). Monkey is added as a fixed
-    covariate when more than one monkey is present, the analog of the sEEG's region /
-    protocol covariates.
-    FDR-BH across all 15 tests (5 outcomes x 3 waveform features), exactly as in the sEEG.
-
-  SESSION LEVEL (bottom row) - the two-stage analog of the sEEG subject-level
-    The same model is fitted WITHIN each session by OLS, and the resulting slopes are
-    tested against zero with a Wilcoxon signed-rank test across sessions.
-
-Outputs: outputs/ecog_primary_lme.csv, ecog_primary_session_betas.csv,
-         outputs/fig_ecog_primary.png / .pdf
-"""
 import warnings; warnings.filterwarnings("ignore")
 import os
 from pathlib import Path
@@ -31,9 +13,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
 OUT = ROOT / "ecog" / "analysis" / "outputs"
@@ -52,7 +31,7 @@ FEATS = {"mean_if_z": "Instantaneous frequency",
 COLORS = {"Coherence": "#8E6BB5", "|ImCoh|": "#4C8BB5", "PDC asymmetry": "#E8A838",
           "Bivariate\nirreversibility": "#5BAD6F",
           "Univariate\nirreversibility": "#C44536"}
-# sEEG alpha reference betas (IF / asc2desc), for the comparison print
+
 SEEG = {"Coherence": (-0.131, -0.023), "|ImCoh|": (-0.098, -0.019),
         "PDC asymmetry": (-0.034, -0.016),
         "Bivariate\nirreversibility": (-0.113, 0.001),
@@ -70,7 +49,6 @@ for c in ["mean_if", "asc2desc", "peak2trough"] + list(OUTCOMES):
     sd = E[c].std()
     E[c + "_z"] = (E[c] - E[c].mean()) / (sd if sd > 0 else 1)
 
-# --- electrode level ---
 rows = []
 for oc, lab in OUTCOMES.items():
     rhs = "mean_if_z + asc2desc_z + peak2trough_z"
@@ -103,7 +81,6 @@ for _, r in R.iterrows():
           f"  [{r.ci_lo:+.3f},{r.ci_hi:+.3f}]{r.p_fdr:>10.4f} {stars(r.p_fdr)}")
 print(f"FDR survivors: {(R.p_fdr < .05).sum()} / {len(R)}")
 
-# --- session level (two-stage) ---
 brows = []
 for oc in OUTCOMES:
     for s, g in E.groupby("session"):
@@ -129,8 +106,7 @@ for (oc, fk), g in B.groupby(["outcome", "feature"]):
         p = stats.wilcoxon(v)[1]
     except Exception:
         p = np.nan
-    # column names match the sEEG's bipolar_subject_level_results.csv, so one figure
-    # script draws both datasets and the two panels cannot drift apart
+
     mean_b = float(np.mean(v)); sem = float(stats.sem(v))
     tcrit = stats.t.ppf(0.975, len(v) - 1)
     srows.append({"outcome": oc, "outcome_label": OUTCOMES[oc], "feature": fk,
@@ -151,7 +127,6 @@ for _, r in S.iterrows():
           f"{r['median']:>+8.3f}{f'{r.n_neg}/{r.n}':>8}{r.p_fdr:>10.4f} {stars(r.p_fdr)}")
 print(f"FDR survivors: {(S.p_fdr < .05).sum()} / {len(S)}")
 
-# --- per-monkey sign consistency ---
 print("\nPER-MONKEY median session slope  (n=4 animals - consistency only, not inference)")
 print("=" * 96)
 piv = (B.groupby(["outcome", "feature", "monkey"]).beta.median()
@@ -167,7 +142,6 @@ for oc, lab in OUTCOMES.items():
         print(f"{lab.replace(chr(10),' '):<28}{fl:<26}{cells}   {agree}/{r.notna().sum()} same sign")
 print(f"  columns: {list(piv.columns)}")
 
-# --- comparison with the sEEG ---
 print("\nvs sEEG alpha (beta: IF / asc2desc)")
 print("=" * 96)
 print(f"{'Outcome':<28}{'sEEG IF':>10}{'ECoG IF':>10}{'':<4}{'sEEG a2d':>10}{'ECoG a2d':>10}")
@@ -180,7 +154,6 @@ for oc, lab in OUTCOMES.items():
     print(f"{lab.replace(chr(10),' '):<28}{s_if:>+10.3f}{e_if.beta.iloc[0]:>+10.3f}{'':<4}"
           f"{s_ad:>+10.3f}{e_ad.beta.iloc[0]:>+10.3f}")
 
-# --- figure ---
 order = list(OUTCOMES.values())[::-1]
 fig, axes = plt.subplots(2, 3, figsize=(15, 9), sharey="row")
 for ci, (fk, fl) in enumerate(FEATS.items()):

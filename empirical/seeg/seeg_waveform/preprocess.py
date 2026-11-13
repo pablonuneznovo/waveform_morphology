@@ -1,10 +1,5 @@
-"""What happens to a segment before the decomposition.
 
-Demeaning, notch filtering, drift detection and detrending, and the segment
-rejection checks. Drift is measured as the total fitted change across the
-segment over its interquartile range, which is dimensionless; a segment is
-detrended when that ratio exceeds the configured threshold.
-"""
+
 from dataclasses import dataclass
 
 import numpy as np

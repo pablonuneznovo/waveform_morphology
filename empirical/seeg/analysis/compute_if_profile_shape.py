@@ -1,20 +1,5 @@
-"""
-compute_if_profile_shape.py - 25 records from 23 patients, bipolar montage
-Within-cycle INSTANTANEOUS-FREQUENCY PROFILE shape descriptors per electrode,
-from the phase-aligned IF (PA-IF) of the alpha (IMF4) component, post-stim.
 
-Rationale (Quinn et al. 2021): the within-cycle IF profile *is* the waveform
-shape - a sinusoid has a FLAT profile; nonsinusoidal cycles show IF deviations.
-mean_if (cycle-averaged IF) is the RATE facet; these descriptors capture the
-SHAPE facet independent of rate, so we can test whether shape predicts
-connectivity BEYOND mean frequency.
 
-Descriptors (all normalised by the profile mean -> rate-invariant):
-  if_prof_range_norm : (max-min) of mean PA-IF profile / mean   [nonsinusoidality]
-  if_prof_std_norm   : std of mean PA-IF profile / mean          [nonsinusoidality]
-  if_prof_asym       : (mean IF first half - second half)/mean   [rise/decay IF asymmetry]
-
-"""
 import argparse, os, sys, time
 from pathlib import Path
 import numpy as np
@@ -22,9 +7,6 @@ import pandas as pd
 from joblib import Parallel, delayed
 from joblib.externals.loky import get_reusable_executor
 
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
 CODE = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 WORK = Path(os.environ.get("WAVEFORM_ALPHA_WORK", ROOT / "work")).expanduser()
@@ -73,8 +55,8 @@ def process_group(path_str, file_stem, entry_index, whitelist):
         pa = res.phase_aligned_if
         if res.status != "ok" or pa is None or np.asarray(pa).ndim != 2:
             row["status"] = f"seg_{res.status}"; out.append(row); continue
-        pa = np.asarray(pa, float)                 # (n_phase_bins, n_cycles)
-        prof = np.nanmean(pa, axis=1)              # mean within-cycle IF profile
+        pa = np.asarray(pa, float)
+        prof = np.nanmean(pa, axis=1)
         m = np.nanmean(prof)
         if not np.isfinite(m) or m <= 1e-9 or prof.size < 8:
             row["status"] = "bad_profile"; out.append(row); continue

@@ -1,12 +1,4 @@
-"""The bipolar montage and the channel retention rules.
 
-This is where the analysed set of channels is defined. Bipolar channels are
-formed from adjacent contacts on the same shaft; a channel is kept only if its
-own atlas label is grey matter and both constituent contacts resolve to one
-region family matching that label. Channels sharing a contact with the
-stimulation pair are dropped, while the stimulated channel itself is kept and
-flagged so it can enter the models as a covariate.
-"""
 
 from dataclasses import dataclass
 import hashlib
@@ -27,7 +19,6 @@ from .quinn_figures import set_publication_style
 from .region_waveform import atlas_region_family, subject_number
 from .spatial_analysis import load_brainstorm_atlas_csv
 
-
 BANDS = ["delta", "theta", "alpha", "beta", "low_gamma", "high_gamma"]
 BAND_LABELS = {
     "delta": "Delta",
@@ -40,15 +31,12 @@ BAND_LABELS = {
 DISTANCE_BIN_EDGES = [0.0, 30.0, 60.0, 90.0, np.inf]
 DISTANCE_BIN_LABELS = ["<30", "30-<60", "60-<90", ">=90"]
 
-
 def normalize_contact(value: object) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(value).upper())
-
 
 def split_bipolar_node(value: object) -> tuple[str, str] | None:
     parts = [normalize_contact(part) for part in re.split(r"\s*-\s*", str(value)) if str(part).strip()]
     return (parts[0], parts[1]) if len(parts) == 2 else None
-
 
 @dataclass
 class BipolarRun:
@@ -58,7 +46,6 @@ class BipolarRun:
     status: str
     message: str = ""
 
-
 @dataclass
 class NodeWindow:
     processed: np.ndarray
@@ -66,15 +53,13 @@ class NodeWindow:
     drift_flag: bool
     noise_flag: bool
 
-
 def filename_stim_amplitude_ma(path: str | Path) -> float:
-    """Return the stimulation current encoded in a recording filename."""
+
     match = re.search(r"_I=([0-9]+(?:\.[0-9]+)?)", Path(path).stem)
     return float(match.group(1)) if match else np.nan
 
-
 def recording_fingerprint(recording: SeegRecording) -> str:
-    """Fingerprint recorded data to prevent duplicated runs entering summaries."""
+
     digest = hashlib.sha256()
     digest.update(np.ascontiguousarray(recording.signal).tobytes())
     digest.update(np.ascontiguousarray(recording.time).tobytes())
@@ -83,13 +68,8 @@ def recording_fingerprint(recording: SeegRecording) -> str:
     digest.update(f"{recording.stim_frequency_hz:g}|{recording.stim_amplitude_ma:g}".encode("ascii"))
     return digest.hexdigest()
 
-
 def duplicate_recording_exclusions(files: list[Path]) -> dict[tuple[Path, int], str]:
-    """Identify exact data duplicates across every run in every file, and retain the
-    (file, entry_index) agreeing with metadata. Keyed by (path, entry_index) since one
-    file can hold many runs and duplicates can occur at the run level, not just the file
-    level.
-    """
+
     grouped: dict[str, list[tuple[Path, int, float]]] = {}
     for path in files:
         try:
@@ -127,7 +107,6 @@ def duplicate_recording_exclusions(files: list[Path]) -> dict[tuple[Path, int], 
             )
     return excluded
 
-
 def _atlas_path(atlas_dir: Path, subject: str, montage: str) -> Path | None:
     number = subject_number(subject)
     if number is None:
@@ -135,10 +114,8 @@ def _atlas_path(atlas_dir: Path, subject: str, montage: str) -> Path | None:
     hits = sorted(atlas_dir.glob(f"*Subject{number:03d}_{montage}_Coordinates_and_Atlas.csv"))
     return hits[0] if hits else None
 
-
 def _unipolar_path(atlas_dir: Path, subject: str) -> Path | None:
     return _atlas_path(atlas_dir, subject, "unipolar_filtered")
-
 
 def _component_region_qc(nodes: pd.DataFrame, atlas_dir: Path, subject: str, primary_atlas: str) -> pd.DataFrame:
     out = nodes.copy()
@@ -162,9 +139,8 @@ def _component_region_qc(nodes: pd.DataFrame, atlas_dir: Path, subject: str, pri
     out["region_unambiguous_flag"] = flags
     return out
 
-
 def make_bipolar_run(path: str | Path, cfg: dict, entry_index: int = 0) -> BipolarRun:
-    """Create atlas-defined adjacent bipolar channels from unipolar recordings."""
+
     source = load_recording(path, entry_index=entry_index)
     minimum = int(cfg["preprocessing"].get("min_channels_per_file", 5))
     if source.signal.shape[1] < minimum:
@@ -237,7 +213,6 @@ def make_bipolar_run(path: str | Path, cfg: dict, entry_index: int = 0) -> Bipol
     )
     return BipolarRun(bipolar, nodes, source, "ok")
 
-
 def analysis_windows(rec: SeegRecording, cfg: dict, early: bool = False) -> tuple[tuple[float, float], tuple[float, float]]:
     settings = cfg["windows"]
     if early:
@@ -251,7 +226,6 @@ def analysis_windows(rec: SeegRecording, cfg: dict, early: bool = False) -> tupl
     )
     return pre, post
 
-
 def _decompose_window(rec: SeegRecording, mask: np.ndarray, cfg: dict) -> list[NodeWindow]:
     outputs: list[NodeWindow] = []
     for index in range(rec.signal.shape[1]):
@@ -261,19 +235,16 @@ def _decompose_window(rec: SeegRecording, mask: np.ndarray, cfg: dict) -> list[N
         outputs.append(NodeWindow(processed, analyze_segment(processed, rec.fs, cfg["emd"]), drift.flagged, noise.flagged))
     return outputs
 
-
 def _selected_imf(result: SegmentResult, imf_number: int) -> np.ndarray | None:
     index = int(imf_number) - 1
     if result.imf is None or result.imf.ndim != 2 or result.imf.shape[1] <= index:
         return None
     return np.asarray(result.imf[:, index], dtype=float)
 
-
 def _metric_mean(result: SegmentResult, metric: str) -> float:
     if result.cycle_table is None or metric not in result.cycle_table:
         return np.nan
     return float(pd.to_numeric(result.cycle_table[metric], errors="coerce").mean())
-
 
 def _profile_rows(run: BipolarRun, pre: list[NodeWindow], post: list[NodeWindow]) -> list[dict]:
     rows: list[dict] = []
@@ -308,7 +279,6 @@ def _profile_rows(run: BipolarRun, pre: list[NodeWindow], post: list[NodeWindow]
                     }
                 )
     return rows
-
 
 def waveform_rows(run: BipolarRun, pre: list[NodeWindow], post: list[NodeWindow], cfg: dict | None = None) -> pd.DataFrame:
     rows: list[dict] = []
@@ -346,11 +316,9 @@ def waveform_rows(run: BipolarRun, pre: list[NodeWindow], post: list[NodeWindow]
         rows.append(row)
     return pd.DataFrame(rows)
 
-
 def _band_power(freqs: np.ndarray, pxx: np.ndarray, band: list[float]) -> float:
     mask = (freqs >= float(band[0])) & (freqs < float(band[1]))
     return float(np.trapezoid(pxx[mask], freqs[mask])) if mask.sum() >= 2 else np.nan
-
 
 def spectral_rows(run: BipolarRun, pre: list[NodeWindow], post: list[NodeWindow], cfg: dict) -> pd.DataFrame:
     rows: list[dict] = []
@@ -385,7 +353,6 @@ def spectral_rows(run: BipolarRun, pre: list[NodeWindow], post: list[NodeWindow]
         rows.append(row)
     return pd.DataFrame(rows)
 
-
 def _mne_values(data: np.ndarray, pairs: list[tuple[int, int]], fs: float, cfg: dict) -> dict[str, np.ndarray]:
     from mne_connectivity import spectral_connectivity_epochs
 
@@ -413,9 +380,8 @@ def _mne_values(data: np.ndarray, pairs: list[tuple[int, int]], fs: float, cfg: 
         for method, output in zip(cfg["connectivity"]["metrics"], outputs)
     }
 
-
 def summarize_imcoh_change(pre_signed: float, post_signed: float) -> dict[str, float]:
-    """Keep signed imaginary coherence separate from the magnitude endpoint."""
+
     return {
         "pre_imcoh_signed": float(pre_signed),
         "post_imcoh_signed": float(post_signed),
@@ -425,16 +391,13 @@ def summarize_imcoh_change(pre_signed: float, post_signed: float) -> dict[str, f
         "delta_abs_imcoh": float(abs(post_signed) - abs(pre_signed)),
     }
 
-
 def _constituent_contacts(node: pd.Series) -> set[str]:
-    """Return normalized unipolar contacts that form one adjacent bipolar node."""
+
     return {str(node["contact_a_norm"]), str(node["contact_b_norm"])}
 
-
 def _share_constituent_contact(left_node: pd.Series, right_node: pd.Series) -> bool:
-    """Identify bipolar edge pairs that are not independent contact pairs."""
-    return bool(_constituent_contacts(left_node) & _constituent_contacts(right_node))
 
+    return bool(_constituent_contacts(left_node) & _constituent_contacts(right_node))
 
 def _segmented_imfs(
     windows: list[NodeWindow], valid: list[int], rec: SeegRecording, cfg: dict, imf_number: int
@@ -445,7 +408,6 @@ def _segmented_imfs(
     if count < 2:
         raise ValueError("Connectivity requires at least two complete analysis segments.")
     return np.stack([signals[start * samples : (start + 1) * samples].T for start in range(count)], axis=0)
-
 
 def connectivity_rows(run: BipolarRun, pre: list[NodeWindow], post: list[NodeWindow], cfg: dict) -> pd.DataFrame:
     nodes = run.nodes
@@ -530,7 +492,6 @@ def connectivity_rows(run: BipolarRun, pre: list[NodeWindow], post: list[NodeWin
             rows.append(row)
     return pd.DataFrame(rows)
 
-
 def _exact_signflip(values: pd.Series) -> float:
     x = values.replace([np.inf, -np.inf], np.nan).dropna().to_numpy(float)
     if x.size == 0:
@@ -538,7 +499,6 @@ def _exact_signflip(values: pd.Series) -> float:
     observed = abs(float(x.mean()))
     means = [abs(float(np.mean(x * np.asarray(signs)))) for signs in product([-1.0, 1.0], repeat=x.size)]
     return float(np.mean(np.asarray(means) >= observed - np.finfo(float).eps))
-
 
 def _holm(p_values: pd.Series) -> pd.Series:
     out = pd.Series(np.nan, index=p_values.index)
@@ -549,9 +509,8 @@ def _holm(p_values: pd.Series) -> pd.Series:
     out.loc[valid.index] = np.minimum(adjusted, 1.0)
     return out
 
-
 def _bh_fdr(p_values: pd.Series) -> pd.Series:
-    """Benjamini-Hochberg FDR correction for prespecified exploratory families."""
+
     out = pd.Series(np.nan, index=p_values.index)
     valid = p_values.dropna().sort_values()
     if valid.empty:
@@ -562,9 +521,8 @@ def _bh_fdr(p_values: pd.Series) -> pd.Series:
     out.loc[valid.index] = np.minimum(adjusted, 1.0)
     return out
 
-
 def paired_protocol_contrasts(subject: pd.DataFrame) -> pd.DataFrame:
-    """Estimate paired 50 Hz minus 1 Hz contrasts without treating runs as independent."""
+
     rows: list[dict] = []
     for endpoint in ["delta_mean_if", "delta_abs_imcoh"]:
         pivot = subject.pivot(index="subject", columns="stim_frequency_hz", values=endpoint)
@@ -586,9 +544,8 @@ def paired_protocol_contrasts(subject: pd.DataFrame) -> pd.DataFrame:
     out["holm_p"] = _holm(out["exact_signflip_p"])
     return out
 
-
 def _secondary_subject_summaries(tables: dict[str, tuple[pd.DataFrame, str]]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Aggregate key secondary connectivity outcomes without edge-level inference."""
+
     subject_frames: list[pd.DataFrame] = []
     summary_rows: list[dict] = []
     for analysis, (run_table, metric) in tables.items():
@@ -631,9 +588,8 @@ def _secondary_subject_summaries(tables: dict[str, tuple[pd.DataFrame, str]]) ->
     subject_out = pd.concat(subject_frames, ignore_index=True) if subject_frames else pd.DataFrame()
     return subject_out, pd.DataFrame(summary_rows)
 
-
 def _nonstimulated_waveform_sensitivity(waveform: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Describe the distributed waveform endpoint after omitting local seed nodes."""
+
     clean = waveform.loc[
         waveform["analysis_include"].fillna(False).astype(bool)
         & ~waveform["is_stimulated_channel"].fillna(False).astype(bool)
@@ -682,9 +638,8 @@ def _nonstimulated_waveform_sensitivity(waveform: pd.DataFrame) -> tuple[pd.Data
     )
     return subject, pd.DataFrame(rows)
 
-
 def _spectral_subject_summaries(sp_runs: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Summarize supportive spectral changes with subjects, not runs, as the unit."""
+
     metrics = [f"delta_{band}_log_power" for band in BANDS]
     if sp_runs.empty:
         empty = pd.DataFrame()
@@ -734,9 +689,8 @@ def _spectral_subject_summaries(sp_runs: pd.DataFrame) -> tuple[pd.DataFrame, pd
     contrasts["bh_fdr_p"] = _bh_fdr(contrasts["exact_signflip_p"])
     return subject, pd.DataFrame(protocol_rows), contrasts
 
-
 def _imf_connectivity_summaries(connectivity: pd.DataFrame, primary_imf: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Summarize IMF1-IMF6 connectivity while preserving IMF4 as the primary endpoint."""
+
     seed = connectivity.loc[
         connectivity["edge_type"].eq("seed_to_target") & connectivity["analysis_include"].fillna(False).astype(bool)
     ].copy()
@@ -803,9 +757,8 @@ def _imf_connectivity_summaries(connectivity: pd.DataFrame, primary_imf: int) ->
     )
     return run, subject, summary
 
-
 def _distance_bin_subject_summary(edges: pd.DataFrame, distance_column: str) -> pd.DataFrame:
-    """Create subject-balanced descriptive profiles across prespecified distance bins."""
+
     if edges.empty:
         return pd.DataFrame()
     clean = edges.copy()
@@ -825,7 +778,6 @@ def _distance_bin_subject_summary(edges: pd.DataFrame, distance_column: str) -> 
         runs.groupby(["subject", "stim_frequency_hz", "distance_bin_mm"], observed=True, as_index=False)
         .agg(delta_abs_imcoh=("delta_abs_imcoh", "mean"), n_runs=("file", "size"), n_edges=("n_edges", "sum"))
     )
-
 
 def summarize_outputs(waveform: pd.DataFrame, connectivity: pd.DataFrame, spectral: pd.DataFrame) -> dict[str, pd.DataFrame]:
     primary_imf = int(connectivity["imf"].dropna().mode().iloc[0]) if "imf" in connectivity and not connectivity["imf"].dropna().empty else 4
@@ -986,10 +938,8 @@ def summarize_outputs(waveform: pd.DataFrame, connectivity: pd.DataFrame, spectr
         "current_sensitivity": pd.DataFrame(current_rows),
     }
 
-
 def _panel(ax: plt.Axes, label: str) -> None:
     ax.text(-0.18, 1.08, label, transform=ax.transAxes, fontweight="bold", fontsize=10, va="top")
-
 
 def _protocol_points(ax: plt.Axes, table: pd.DataFrame, metric: str, ylabel: str, title: str) -> None:
     for freq, color in [(1, "#2A9D8F"), (50, "#D62828")]:
@@ -1002,14 +952,12 @@ def _protocol_points(ax: plt.Axes, table: pd.DataFrame, metric: str, ylabel: str
     ax.set_ylabel(ylabel)
     ax.set_title(title)
 
-
 def _protocol_n_label(table: pd.DataFrame, metric: str) -> str:
     counts = {
         freq: table.loc[table["stim_frequency_hz"].eq(freq), metric].notna().sum()
         for freq in (1, 50)
     }
     return f"1 Hz n={counts[1]}; 50 Hz n={counts[50]}"
-
 
 def _distance_profile(ax: plt.Axes, data: pd.DataFrame, title: str) -> None:
     if data.empty or "stim_frequency_hz" not in data.columns:
@@ -1042,7 +990,6 @@ def _distance_profile(ax: plt.Axes, data: pd.DataFrame, title: str) -> None:
     ax.set_ylabel("Post - pre |imaginary coherence|")
     ax.set_title(title)
     ax.legend(frameon=False, fontsize=6, loc="best")
-
 
 def _imf_summary_heatmap(ax: plt.Axes, summary: pd.DataFrame, metric: str, title: str) -> plt.Axes:
     imfs = [1, 2, 3, 4, 5, 6]
@@ -1078,7 +1025,6 @@ def _imf_summary_heatmap(ax: plt.Axes, summary: pd.DataFrame, metric: str, title
     ax.set_xlabel("Intrinsic mode function")
     return image
 
-
 def _relationship_scatter(ax: plt.Axes, runs: pd.DataFrame, subject: pd.DataFrame) -> None:
     for freq, color in [(1, "#2A9D8F"), (50, "#D62828")]:
         run = runs.loc[runs["stim_frequency_hz"].eq(freq)]
@@ -1097,7 +1043,6 @@ def _relationship_scatter(ax: plt.Axes, runs: pd.DataFrame, subject: pd.DataFram
     ax.set_ylabel("Post - pre seed-to-target |imaginary coherence|")
     ax.set_title("Waveform change in relation to connectivity change")
     ax.legend(frameon=False, fontsize=6, loc="best")
-
 
 def make_figures(
     qc: pd.DataFrame,
@@ -1213,7 +1158,6 @@ def make_figures(
         plt.close(fig)
         paths.append(path)
     return paths
-
 
 def run_analysis(
     config_path: str | Path,

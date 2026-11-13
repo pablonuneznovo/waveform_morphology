@@ -1,8 +1,5 @@
-"""
-compute_univariate_irreversibility.py - 25-record bipolar (23 patients)
-Per-electrode UNIVARIATE time-irreversibility = derivative skewness of the alpha
-(IMF4) component in the post-stimulation window.
-"""
+
+
 import argparse, os, sys, time
 from pathlib import Path
 import numpy as np
@@ -61,8 +58,8 @@ def process_group(path_str, file_stem, entry_index, whitelist):
         imf4 = np.asarray(res.imf[:, IMF4_IDX], float)
         d = np.diff(imf4)
         sk = float(stats.skew(d, bias=False)) if d.size > 5 and np.std(d) > 1e-12 else np.nan
-        row["uni_irrev"] = sk               # signed derivative skewness
-        row["uni_irrev_abs"] = abs(sk)      # magnitude of irreversibility
+        row["uni_irrev"] = sk
+        row["uni_irrev_abs"] = abs(sk)
         out.append(row)
     return out
 

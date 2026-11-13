@@ -1,7 +1,5 @@
-"""
-run_bipolar_subject_level.py - bipolar, 25 records from 23 patients
-Two-stage (summary-statistics) analysis - the honest inference for nested data.
-"""
+
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -17,7 +15,6 @@ ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
 OUT_DIR = ROOT / "seeg" / "analysis" / "outputs"
 
-# --- 1. Load (identical prep to run_bipolar_lme.py) ---
 elec = pd.read_csv(OUT_DIR / "electrode_level_summary_bipolar.csv", low_memory=False)
 
 KEY_COLS = [
@@ -32,12 +29,6 @@ df["stim_freq"] = df["stim_frequency_hz"].astype(str)
 df["is_stim"]   = (df["is_stimulated_channel"].astype(str)
                      .str.lower().eq("true").astype(int))
 
-# --- Patient grouping ---
-# SEEG_Sociodemo.csv holds 25 sEEG records from 23 distinct patients: its Title
-# field marks HEJ_Subject004 as the second sEEG session of HEJ_Subject001, and
-# HEJ_Subject015 as the second session of HEJ_Subject014. Grouping on the record
-# would enter those two people twice as independent patients, so the grouping
-# variable is the patient.
 REPEAT_SESSIONS = {
     "HEJ_Subject004": "HEJ_Subject001",
     "HEJ_Subject015": "HEJ_Subject014",
@@ -49,7 +40,6 @@ print(f"records: {df['record'].nunique()}  ->  patients: {df['subject'].nunique(
 WAVEFORM = ["mean_if", "asc2desc", "peak2trough"]
 OUTCOMES = ["mean_coh", "mean_abs_imcoh", "pdc_asymmetry", "mean_io_adaptive", "uni_irrev"]
 
-# global z-scoring (same as LME)
 for col in WAVEFORM + OUTCOMES:
     mu, sd = df[col].mean(), df[col].std()
     df[col + "_z"] = (df[col] - mu) / sd
@@ -65,12 +55,11 @@ FEATURE_LABELS = {"mean_if_z": "Instantaneous frequency",
                   "peak2trough_z": "Peak/trough ratio"}
 WAVE_Z = list(FEATURE_LABELS.keys())
 
-# --- 2. Stage 1 - per-subject regressions ---
 beta_rows = []
 for outcome in OUTCOMES:
     for subj in subjects:
         sd = df[df["subject"] == subj]
-        # build RHS, dropping covariate terms that do not vary within-subject
+
         rhs = ["mean_if_z", "asc2desc_z", "peak2trough_z"]
         if sd["region"].nunique() > 1:
             rhs.append("C(region, Treatment('frontal'))"
@@ -100,7 +89,6 @@ betas_long = betas.melt(id_vars=["outcome", "subject", "n_elec"],
                         value_vars=WAVE_Z, var_name="feature", value_name="beta")
 betas_long.to_csv(OUT_DIR / "bipolar_subject_level_betas.csv", index=False)
 
-# --- 3. Stage 2 - test the 23 slopes per cell ---
 records = []
 for outcome in OUTCOMES:
     for feat in WAVE_Z:
@@ -131,7 +119,6 @@ res["p_fdr"]   = multipletests(res["wilcoxon_p"].values, method="fdr_bh")[1]
 res["t_p_fdr"] = multipletests(res["t_p"].values,        method="fdr_bh")[1]
 res.to_csv(OUT_DIR / "bipolar_subject_level_results.csv", index=False)
 
-# --- 4. Print ---
 def stars(p):
     return ("***" if p < 0.001 else "**" if p < 0.01 else
             "*" if p < 0.05 else "ns")

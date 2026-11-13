@@ -1,25 +1,5 @@
-"""
-ecog_pipeline.py - waveform / connectivity pipeline for the Neurotycho ECoG.
 
-Same waveform descriptors, same five outcomes and the same adaptive-T INSIDEOUT as the
-sEEG analysis, so the two datasets are directly comparable.
 
-  * NOTCH 50/100/150 Hz, where the sEEG uses 60/120/180. RIKEN is eastern Japan;
-    measured peak/neighbour ratio 25.6 at 50 Hz against 1.18 at 60 Hz.
-  * IMF_IDX = 3 (IMF4). Verified empirically: 11.8 Hz awake eyes-closed, cascade
-    ratios near 2.0. Same index as the sEEG, because the EMD masks are pinned in
-    absolute Hz.
-  * BIPOLAR montage from the published X/Y map: consecutive channel numbering
-    corresponds to mutual nearest neighbours for only 23% of pairs. Built by
-    ecog_montage.py.
-
-Per condition -> per epoch -> per bipolar channel: IMF4 waveform features + univariate
-irreversibility; then every bipolar pair: coherence, |ImCoh|, gPDC asymmetry, INSIDEOUT
-with per-pair adaptive T. Pair values are averaged over epochs, then aggregated to the
-electrode level over all that channel's pairs (exactly as in the sEEG).
-
-Outputs -> outputs/{channels,pairs,electrodes}_<session>_<condition>.csv
-"""
 import argparse, sys, time, itertools, warnings
 warnings.filterwarnings("ignore")
 import os
@@ -31,9 +11,6 @@ from scipy import signal as sps, stats
 from joblib import Parallel, delayed
 from joblib.externals.loky import get_reusable_executor
 
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
 CODE = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
@@ -46,9 +23,9 @@ OUT.mkdir(parents=True, exist_ok=True)
 FS         = 1000.0
 NOTCH      = [50.0, 100.0, 150.0]
 NOTCH_Q    = 30.0
-IMF_IDX    = 3               # IMF4 = alpha (verified)
+IMF_IDX    = 3
 MAX_IMFS   = 6
-EPOCH_S    = 28.0            # same window as the sEEG analysis
+EPOCH_S    = 28.0
 WELCH_S    = 4.0
 BAND       = (8.0, 13.0)
 MAX_EPOCHS = 10
@@ -59,7 +36,6 @@ EMD_CFG = {"max_imfs": MAX_IMFS, "nphases": 4, "imf_index": IMF_IDX, "smooth_pha
            "min_cycles_required": 5, "max_if_hz": 20.0, "max_if_range_hz": 20.0,
            "amp_percentile": 10.0}
 
-# --- helpers ---
 def notch(x, fs=FS):
     for f0 in NOTCH:
         if f0 < fs / 2:
@@ -68,7 +44,7 @@ def notch(x, fs=FS):
     return x
 
 def band_pair(x, y, fs=FS):
-    """Coherence and |ImCoh| averaged over the alpha band."""
+
     nper = int(WELCH_S * fs)
     f, Pxy = sps.csd(x, y, fs, nperseg=nper)
     _, Pxx = sps.welch(x, fs, nperseg=nper)
@@ -80,7 +56,7 @@ def band_pair(x, y, fs=FS):
     return float(np.mean(np.abs(C))), float(np.mean(np.abs(C.imag)))
 
 def insideout(a, b, T):
-    """Reference INSIDEOUT (Deco et al. 2023), the same estimator used for the sEEG."""
+
     X = np.vstack([a, b]).astype(float)
     X -= X.mean(axis=1, keepdims=True)
     sd = X.std(axis=1, keepdims=True); sd[sd < np.finfo(float).eps] = np.finfo(float).eps
@@ -108,9 +84,8 @@ def conditions_of(sess: Path):
                 out[nm] = (int(idx[i]), int(idx[e[0]]))
     return out
 
-# --- one epoch: all channels + all pairs ---
 def do_epoch(sig, ep_i, want_pdc_pairs):
-    """sig: dict bip_id -> raw bipolar segment for this epoch."""
+
     import numpy as np
     from scipy import stats as st
     from seeg_waveform.quinn import analyze_segment
@@ -147,7 +122,7 @@ def do_epoch(sig, ep_i, want_pdc_pairs):
             coh, imc = band_pair(x, y)
         except Exception:
             continue
-        # ADAPTIVE T: quarter period of THIS pair's own frequency
+
         fp = np.nanmean([feats[a]["mean_if"], feats[b]["mean_if"]])
         if not np.isfinite(fp) or fp <= 0:
             fp = 10.0
@@ -156,8 +131,7 @@ def do_epoch(sig, ep_i, want_pdc_pairs):
         pdc = np.nan
         if (a, b) in want_pdc_pairs:
             try:
-                # max_order 30, as in the sEEG: at target_fs 128 alpha has a
-                # ~11.6-sample period, and measured pdc_valid is 100% at this order.
+
                 pr = generalized_pdc_pair(x, y, FS, target_fs=128.0, max_order=30,
                                           whiteness_alpha=0.001, epsilon=1e-12)
                 if pr.get("pdc_valid"):
@@ -168,7 +142,6 @@ def do_epoch(sig, ep_i, want_pdc_pairs):
                      "imcoh": imc, "insideout": io, "T": T, "pdc_asym": pdc})
     return list(feats.values()), rows
 
-# --- main ---
 def run_session(folder: Path, monkey: str, jobs: int, limit_cond=None):
     mont = pd.read_csv(OUT / f"ecog_montage_{monkey}.csv")
     print(f"montage: {len(mont)} bipolar channels")
@@ -182,7 +155,7 @@ def run_session(folder: Path, monkey: str, jobs: int, limit_cond=None):
         if not cond:
             continue
         tag = f"{folder.name.split('_')[0]}_{sess.name}"
-        # load every electrode this montage needs, once
+
         need = sorted(set(mont.ch_a) | set(mont.ch_b))
         raw = {}
         for ch in need:
@@ -229,8 +202,6 @@ def run_session(folder: Path, monkey: str, jobs: int, limit_cond=None):
             C.to_csv(OUT / f"channels_{tag}_{cname}.csv", index=False)
             P.to_csv(OUT / f"pairs_{tag}_{cname}.csv", index=False)
 
-            # electrode level: average each channel's waveform over epochs, and its
-            # connectivity over every pair it belongs to (same as the sEEG)
             wf = C.groupby("bip").agg(mean_if=("mean_if", "mean"),
                                       asc2desc=("asc2desc", "mean"),
                                       peak2trough=("peak2trough", "mean"),

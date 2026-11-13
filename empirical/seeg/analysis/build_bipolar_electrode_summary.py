@@ -1,23 +1,10 @@
-"""
-build_bipolar_electrode_summary.py
-===================================
-Build electrode_level_summary_bipolar.csv for the 25-record dataset (23 patients).
 
-Sources (pair_tables/tables/bipolar/)
-  channel_epoch_imf4_features.csv  - waveform features per electrode per epoch
-  all_pairs_connectivity.csv       - pair-level ImCoh / gPDC / TRA  (~12 GB)
 
-Output
-  outputs/electrode_level_summary_bipolar.csv
-"""
 import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# Data lives outside the repository: WAVEFORM_ALPHA points at the folder
-# holding seeg/ and ecog/. Without it the paths resolve against the working
-# directory, so run from that folder instead.
 ROOT = Path(os.environ.get("WAVEFORM_ALPHA", ".")).expanduser()
 
 TABLE_DIR  = ROOT / "seeg" / "pair_tables" / "tables" / "bipolar"
@@ -27,13 +14,11 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 CHUNK_SIZE = 500_000
 KEY_COLS   = ["file", "entry_index", "subject", "stim_frequency_hz"]
 
-# --- 1. Waveform features - post epoch only ---
 print("Loading waveform features...")
 wf = pd.read_csv(TABLE_DIR / "channel_epoch_imf4_features.csv", low_memory=False)
 wf_post = wf[wf["epoch"] == "post"].copy()
 print(f"  Post-epoch electrodes: {len(wf_post):,}")
 
-# --- 2. Aggregate connectivity to electrode level - vectorised chunks ---
 print("Aggregating connectivity (chunked, vectorised)...")
 
 imcoh_parts  = []
@@ -61,7 +46,6 @@ for chunk in pd.read_csv(conn_path, usecols=CONN_COLS,
 
     chunk["pdc_valid"] = chunk["pdc_valid"].astype(str).str.lower() == "true"
 
-    # --- ImCoh (symmetric: same value for both electrodes in a pair) ---
     base = chunk[KEY_COLS + ["channel_a", "channel_b", "abs_imcoh"]].copy()
     a_side = base.rename(columns={"channel_a": "channel", "channel_b": "_partner"})
     b_side = base.rename(columns={"channel_b": "channel", "channel_a": "_partner"})
@@ -73,15 +57,14 @@ for chunk in pd.read_csv(conn_path, usecols=CONN_COLS,
                .agg(imcoh_sum=("abs_imcoh", "sum"), imcoh_n=("_imcoh_n", "sum"))
     )
 
-    # --- gPDC (directional: channel_a -> channel_b) ---
     pdc = chunk[chunk["pdc_valid"]].copy()
     pdc = pdc[pdc["gpdc_a_to_b"].notna() & pdc["gpdc_b_to_a"].notna()]
     if not pdc.empty:
-        # channel_a perspective: out=gpdc_a_to_b, in=gpdc_b_to_a
+
         pa = pdc[KEY_COLS + ["channel_a", "gpdc_a_to_b", "gpdc_b_to_a"]].copy()
         pa = pa.rename(columns={"channel_a": "channel",
                                  "gpdc_a_to_b": "gpdc_out", "gpdc_b_to_a": "gpdc_in"})
-        # channel_b perspective: out=gpdc_b_to_a, in=gpdc_a_to_b
+
         pb = pdc[KEY_COLS + ["channel_b", "gpdc_b_to_a", "gpdc_a_to_b"]].copy()
         pb = pb.rename(columns={"channel_b": "channel",
                                  "gpdc_b_to_a": "gpdc_out", "gpdc_a_to_b": "gpdc_in"})
@@ -94,7 +77,6 @@ for chunk in pd.read_csv(conn_path, usecols=CONN_COLS,
                             gpdc_n=("_n", "sum"))
         )
 
-    # --- TRA (symmetric) ---
     tra = chunk[KEY_COLS + ["channel_a", "channel_b", "tra_unsigned"]].copy()
     ta = tra.rename(columns={"channel_a": "channel", "channel_b": "_p"})
     tb = tra.rename(columns={"channel_b": "channel", "channel_a": "_p"})
@@ -112,7 +94,6 @@ for chunk in pd.read_csv(conn_path, usecols=CONN_COLS,
 
 print(f"  Finished {n_chunks} chunks, {total_rows:,} total post-epoch pair rows.")
 
-# --- 3. Combine chunk parts and compute per-electrode means ---
 print("Combining and computing means...")
 GRP = KEY_COLS + ["channel"]
 
@@ -135,7 +116,6 @@ tra_agg = (pd.concat(tra_parts, ignore_index=True)
              .agg(tra_sum=("tra_sum", "sum"), tra_n=("tra_n", "sum")))
 tra_agg["mean_tra"] = tra_agg["tra_sum"] / tra_agg["tra_n"]
 
-# --- 4. Merge waveform + connectivity ---
 print("Merging...")
 summary = wf_post.merge(
     imcoh_agg[GRP + ["mean_abs_imcoh"]], on=GRP, how="left"
@@ -161,7 +141,6 @@ summary = summary[col_order]
 out_path = OUT_DIR / "electrode_level_summary_bipolar.csv"
 summary.to_csv(out_path, index=False)
 
-# --- 5. Report ---
 print(f"\nSaved: {out_path}")
 print(f"  Total electrodes      : {len(summary):,}")
 print(f"  Subjects              : {summary['subject'].nunique()}")

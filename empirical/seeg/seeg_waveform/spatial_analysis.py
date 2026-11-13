@@ -1,10 +1,4 @@
-"""Distance between channels, and the spatial controls.
 
-Builds the coordinate matrices, computes each channel's distance to the
-stimulation site, and adds those as features so that a connectivity effect can
-be checked against the simpler explanation that nearby channels are more
-coupled.
-"""
 
 import re
 from pathlib import Path
@@ -14,7 +8,6 @@ import pandas as pd
 from scipy import stats
 
 from .localization import normalize_channel_name
-
 
 ATLAS_COLUMNS = [
     "HCPEX",
@@ -34,7 +27,6 @@ ATLAS_COLUMNS = [
     "TIAN_SUBCORTEX",
 ]
 
-
 NON_GRAY_PATTERNS = [
     "white_matter",
     "out_of_atlas",
@@ -46,15 +38,12 @@ NON_GRAY_PATTERNS = [
     "not found",
 ]
 
-
 def _norm_region_text(value: object) -> str:
     return re.sub(r"\s+", "_", str(value).strip().lower())
-
 
 def is_non_gray_label(value: object) -> bool:
     text = _norm_region_text(value)
     return any(pattern in text for pattern in NON_GRAY_PATTERNS)
-
 
 def load_brainstorm_atlas_csv(path: Path, primary_atlas: str = "AAL") -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -84,7 +73,6 @@ def load_brainstorm_atlas_csv(path: Path, primary_atlas: str = "AAL") -> pd.Data
     df["hemisphere"] = np.where(df["x_mni"] < 0, "left", "right")
     return df
 
-
 def coords_matrix(df: pd.DataFrame, space: str = "mni") -> np.ndarray:
     if space == "mni":
         cols = ["x_mni", "y_mni", "z_mni"]
@@ -95,7 +83,6 @@ def coords_matrix(df: pd.DataFrame, space: str = "mni") -> np.ndarray:
     else:
         raise ValueError("space must be 'mni', 'world', or 'scs'")
     return df[cols].to_numpy(dtype=float)
-
 
 def nearest_stim_distance(
     atlas: pd.DataFrame,
@@ -113,7 +100,6 @@ def nearest_stim_distance(
     nearest_distance = distances[np.arange(len(atlas)), nearest_idx]
     nearest_channel = stim.iloc[nearest_idx]["channel"].to_numpy()
     return pd.Series(nearest_distance, index=atlas.index), pd.Series(nearest_channel, index=atlas.index)
-
 
 def add_waveform_spatial_features(
     waveform: pd.DataFrame,
@@ -151,7 +137,6 @@ def add_waveform_spatial_features(
         "hemisphere",
     ]
     return out.merge(atlas[atlas_cols].drop_duplicates("channel_norm"), on="channel_norm", how="left", suffixes=("", "_atlas"))
-
 
 def add_connectivity_spatial_features(
     connectivity: pd.DataFrame,
@@ -199,7 +184,6 @@ def add_connectivity_spatial_features(
     )
     return out
 
-
 def spearman_summary(df: pd.DataFrame, x: str, y: str, group_cols: list[str]) -> pd.DataFrame:
     rows = []
     for keys, group in df.groupby(group_cols, dropna=False):
@@ -218,7 +202,6 @@ def spearman_summary(df: pd.DataFrame, x: str, y: str, group_cols: list[str]) ->
             row["p_value"] = np.nan
         rows.append(row)
     return pd.DataFrame(rows)
-
 
 def bh_fdr(p_values: pd.Series) -> pd.Series:
     p = p_values.to_numpy(dtype=float)
